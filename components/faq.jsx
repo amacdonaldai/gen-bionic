@@ -16,8 +16,9 @@ const Faq = () => {
 
     return (
         <div>
-            <Link href="#" onClick={toggleOverlay} className="text-black underline text-sm font-medium">
-                FAQ
+            <Link href="https://symbolic-dusky.vercel.app/"   target="_blank" 
+  rel="noopener noreferrer" className="text-black underline text-sm font-medium">
+                Symbolic prompting
             </Link>
 
             {isOpen && (
