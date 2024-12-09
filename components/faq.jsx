@@ -18,7 +18,7 @@ const Faq = () => {
         <div>
             <Link href="https://symbolic-dusky.vercel.app/"   target="_blank" 
   rel="noopener noreferrer" className="text-black underline text-sm font-medium">
-                Symbolic prompting
+                Symbolic Prompting
             </Link>
 
             {isOpen && (
