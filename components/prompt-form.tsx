@@ -449,7 +449,8 @@ export function PromptForm({
               type="submit"
               size="icon"
               disabled={input === '' && uploadedImages.length === 0}
-              className="bg-transparent shadow-none text-zinc-950 rounded-full hover:bg-zinc-200"
+              className="bg-black shadow-none hover:bg-gray-800 rounded-full"
+              style={{background: "black"}}
             >
               <IconArrowElbow />
               <span className="sr-only">Send message</span>
