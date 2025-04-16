@@ -42,12 +42,14 @@ export interface User extends Record<string, any> {
 
 export type ContentItem = {
   type: 'paragraph' | 'list' | 'quote';
-  content: string;
+  content?: string;  // For paragraph type only
+  list?: string[];   // For list type
+  quote?: string;    // For quote type
 };
 
 export type Slide = {
   title: string;
   type: 'title' | 'overview' | 'detail' | 'comparison' | 'statistics' | 'case-study' | 'conclusion';
   content: ContentItem[];
-  contentType: string;
+  contentType: string; // Allow any string for contentType
 };

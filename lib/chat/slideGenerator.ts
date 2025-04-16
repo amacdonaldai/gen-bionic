@@ -76,27 +76,32 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
             temperature: 0.7,
         });
 
-        console.log(JSON.stringify(object, null, 2));
-
         // Process the slides to normalize the content structure for our components
         const processedSlides = object.slides.map((slide: any) => {
             return {
                 ...slide,
                 content: slide.content.map((item: any) => {
-                    // Create a normalized content item based on type
                     switch (item.type) {
                         case 'paragraph':
-                            return { type: 'paragraph', content: item.content || '' };
+                            return {
+                                type: 'paragraph',
+                                content: item.content || ''
+                            };
                         case 'list':
                             return {
                                 type: 'list',
-                                content: item.list ?
-                                    item.list.join('\n') : ''
+                                list: item.list || []
                             };
                         case 'quote':
-                            return { type: 'quote', content: item.quote || '' };
+                            return {
+                                type: 'quote',
+                                quote: item.quote || ''
+                            };
                         default:
-                            return { type: 'paragraph', content: '' };
+                            return {
+                                type: 'paragraph',
+                                content: ''
+                            };
                     }
                 })
             };
@@ -105,16 +110,7 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
         // Return the processed slides
         return processedSlides as Slide[];
     } catch (error) {
-        if (NoObjectGeneratedError.isInstance(error)) {
-            console.log('NoObjectGeneratedError');
-            console.log('Cause:', error.cause);
-            console.log('Text:', error.text);
-            console.log('Response:', error.response);
-            console.log('Usage:', error.usage);
-            console.log('Finish Reason:', error.finishReason);
-        } else {
-            console.error('Other error:', error);
-        }
+        console.error('Error generating slides:', error);
 
         // Return a basic error slide if generation fails
         return [{

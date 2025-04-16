@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronLeft,
@@ -12,10 +12,38 @@ import {
     FileText,
     SquareArrowRightIcon,
     CheckCircle2Icon,
-    Quote
+    Quote,
+    ListIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slide, ContentItem } from '@/lib/types';
+
+// Color options for different slide types
+const titleGradients = [
+    'bg-gradient-to-br from-blue-600 to-blue-800',
+    'bg-gradient-to-br from-purple-600 to-indigo-800',
+    'bg-gradient-to-br from-indigo-600 to-blue-900',
+    'bg-gradient-to-br from-blue-500 to-indigo-700',
+    'bg-gradient-to-br from-violet-600 to-blue-700',
+    'bg-gradient-to-br from-pink-600 to-purple-800',
+    'bg-gradient-to-br from-cyan-600 to-blue-800',
+    'bg-gradient-to-br from-slate-700 to-slate-900',
+    'bg-gradient-to-br from-fuchsia-600 to-purple-800',
+    'bg-gradient-to-br from-sky-600 to-indigo-800'
+];
+
+const conclusionGradients = [
+    'bg-gradient-to-br from-green-600 to-green-800',
+    'bg-gradient-to-br from-teal-600 to-emerald-800',
+    'bg-gradient-to-br from-emerald-600 to-teal-800',
+    'bg-gradient-to-br from-green-500 to-teal-700',
+    'bg-gradient-to-br from-teal-500 to-green-700',
+    'bg-gradient-to-br from-lime-600 to-green-800',
+    'bg-gradient-to-br from-emerald-500 to-cyan-800',
+    'bg-gradient-to-br from-green-600 to-emerald-900',
+    'bg-gradient-to-br from-teal-600 to-green-900',
+    'bg-gradient-to-br from-cyan-600 to-teal-800'
+];
 
 interface PresentationSlidesProps {
     slides: Slide[];
@@ -24,33 +52,24 @@ interface PresentationSlidesProps {
 const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) => {
     const [currentSlide, setCurrentSlide] = useState(0);
 
-    const nextSlide = () => {
-        if (currentSlide < slides.length - 1) {
-            setCurrentSlide(currentSlide + 1);
-        }
-    };
+    const slideColors = useMemo(() => {
+        const getRandomItem = (array: string[]) => array[Math.floor(Math.random() * array.length)];
 
-    const prevSlide = () => {
-        if (currentSlide > 0) {
-            setCurrentSlide(currentSlide - 1);
-        }
-    };
+        if (!slides || slides.length === 0) return {};
 
-    // Handle keyboard navigation
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowRight') {
-                nextSlide();
-            } else if (e.key === 'ArrowLeft') {
-                prevSlide();
+        const colors: Record<string, string> = {};
+
+        slides.forEach((slide, index) => {
+            const id = `${slide.type}-${index}`;
+            if (slide.type === 'title') {
+                colors[id] = getRandomItem(titleGradients);
+            } else if (slide.type === 'conclusion') {
+                colors[id] = getRandomItem(conclusionGradients);
             }
-        };
+        });
 
-        window.addEventListener('keydown', handleKeyDown);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [currentSlide, slides.length]);
+        return colors;
+    }, [slides]);
 
     if (!slides || slides.length === 0) {
         return (
@@ -60,7 +79,6 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
         );
     }
 
-    // Get the icon for the slide type
     const getIconForType = (type: Slide['type']) => {
         switch (type) {
             case 'title':
@@ -82,12 +100,13 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
         }
     };
 
-    // Get styling based on slide type
-    const getSlideBackground = (type: string) => {
+    const getSlideBackground = (type: string, index: number) => {
+        const id = `${type}-${index}`;
+
         if (type === 'title') {
-            return 'bg-gradient-to-br from-blue-600 to-blue-800';
+            return slideColors[id] || titleGradients[0];
         } else if (type === 'conclusion') {
-            return 'bg-gradient-to-br from-green-600 to-green-800';
+            return slideColors[id] || conclusionGradients[0];
         } else {
             return 'bg-white';
         }
@@ -101,59 +120,74 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
         }
     };
 
-    // Format content with markdown-style formatting
-    const formatContentItem = (item: ContentItem, idx: number, slideType: string) => {
-        const formattedContent = item.content
+    const formatMarkdown = (text: string, slideType: string) => {
+        return text
             .replace(/\*\*(.*?)\*\*/g, `<strong class="font-bold ${getTextColor(slideType) === 'text-white' ? 'text-white' : 'text-blue-600'}"">$1</strong>`)
             .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>');
+    };
 
+    const formatContentItem = (item: ContentItem, idx: number, slideType: string) => {
         switch (item.type) {
             case 'paragraph':
+                if (!item.content) return null;
+
                 return (
                     <p
                         key={idx}
                         className="mb-4 leading-relaxed"
-                        dangerouslySetInnerHTML={{ __html: formattedContent }}
+                        dangerouslySetInnerHTML={{ __html: formatMarkdown(item.content, slideType) }}
                     />
                 );
 
             case 'list':
+                if (!item.list || item.list.length === 0) return null;
+
                 return (
-                    <div key={idx} className="mb-4 ml-4">
-                        <div dangerouslySetInnerHTML={{ __html: formattedContent }} />
+                    <div key={idx} className="mb-4 flex flex-col space-y-2">
+                        {item.list.map((listItem, listIdx) => (
+                            <div key={`${idx}-${listIdx}`} className="flex items-start">
+                                <div className="flex items-center mr-2 text-blue-500 text-lg">
+                                    {"•"}
+                                </div>
+                                <div
+                                    className="flex-1"
+                                    dangerouslySetInnerHTML={{
+                                        __html: formatMarkdown(listItem, slideType)
+                                    }}
+                                />
+                            </div>
+                        ))}
                     </div>
                 );
 
             case 'quote':
+                if (!item.quote) return null;
+
                 return (
                     <div key={idx} className={`mb-4 pl-4 border-l-4 ${getTextColor(slideType) === 'text-white' ? 'border-white/60' : 'border-blue-400'} italic`}>
                         <div className="flex items-start gap-2">
                             <Quote className={`h-4 w-4 mt-1.5 flex-shrink-0 ${getTextColor(slideType) === 'text-white' ? 'text-white/80' : 'text-blue-500'}`} />
-                            <div dangerouslySetInnerHTML={{ __html: formattedContent }} />
+                            <div dangerouslySetInnerHTML={{ __html: formatMarkdown(item.quote, slideType) }} />
                         </div>
                     </div>
                 );
 
             default:
-                return (
-                    <p key={idx} className="mb-4" dangerouslySetInnerHTML={{ __html: formattedContent }} />
-                );
+                return null;
         }
     };
 
     const currentSlideData = slides[currentSlide];
 
-    // Special handling for title slide
     const renderTitleSlideContent = () => {
-        // For title slides, we'll display the first paragraph content item
         const paragraphItem = currentSlideData.content.find(item => item.type === 'paragraph');
-        return paragraphItem ? paragraphItem.content : '';
+        return paragraphItem && paragraphItem.content ? paragraphItem.content : '';
     };
 
     return (
-        <div className="relative pb-4 h-full flex flex-col">
+        <div className="relative h-full flex flex-col">
             {/* Slide content */}
-            <div className="flex-1 overflow-hidden mb-4 border border-gray-200 rounded-xl shadow-lg">
+            <div className="flex-1 overflow-hidden mb-4 border border-gray-200 rounded-xl shadow-sm">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={currentSlide}
@@ -161,7 +195,7 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3 }}
-                        className={`h-full w-full rounded-xl shadow-lg flex flex-col ${getSlideBackground(currentSlideData.type)}`}
+                        className={`h-full w-full flex flex-col ${getSlideBackground(currentSlideData.type, currentSlide)}`}
                     >
                         {currentSlideData.type === 'title' ? (
                             // Title slide layout
@@ -202,7 +236,11 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                 <Button
                     variant="outline"
                     size="icon"
-                    onClick={prevSlide}
+                    onClick={() => {
+                        if (currentSlide > 0) {
+                            setCurrentSlide(currentSlide - 1);
+                        }
+                    }}
                     disabled={currentSlide === 0}
                     className="rounded-full"
                 >
@@ -216,7 +254,11 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                 <Button
                     variant="outline"
                     size="icon"
-                    onClick={nextSlide}
+                    onClick={() => {
+                        if (currentSlide < slides.length - 1) {
+                            setCurrentSlide(currentSlide + 1);
+                        }
+                    }}
                     disabled={currentSlide === slides.length - 1}
                     className="rounded-full"
                 >
