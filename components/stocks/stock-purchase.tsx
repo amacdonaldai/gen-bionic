@@ -22,7 +22,6 @@ export function Purchase({
   const [purchasingUI, setPurchasingUI] = useState<null | React.ReactNode>(null)
   const [aiState, setAIState] = useAIState<typeof AI>()
   const [, setMessages] = useUIState<typeof AI>()
-  const { confirmPurchase } = useActions()
 
   // Unique identifier for this UI component.
   const id = useId()
@@ -119,16 +118,6 @@ export function Purchase({
 
           <button
             className="mt-6 w-full rounded-xl bg-green-400 px-4 py-2 font-bold text-zinc-900 hover:bg-green-500"
-            onClick={async () => {
-              const response = await confirmPurchase(symbol, price, value)
-              setPurchasingUI(response.purchasingUI)
-
-              // Insert a new system message to the UI.
-              setMessages((currentMessages: any) => [
-                ...currentMessages,
-                response.newMessage
-              ])
-            }}
           >
             Purchase
           </button>

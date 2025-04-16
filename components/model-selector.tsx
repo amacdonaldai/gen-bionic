@@ -18,16 +18,16 @@ interface ModelOption {
 }
 
 const MODEL_OPTIONS: ModelOption[] = [
-  {
-    value: "o1-preview",
-    label: "o1-preview",
-    description: "reasoning model designed to solve hard problems across domains."
-  },
-  {
-    value: "o1-mini",
-    label: "o1-mini",
-    description: "faster and cheaper reasoning model particularly good at coding, math, and science."
-  },
+  // {
+  //   value: "o1-preview",
+  //   label: "o1-preview",
+  //   description: "reasoning model designed to solve hard problems across domains."
+  // },
+  // {
+  //   value: "o1-mini",
+  //   label: "o1-mini",
+  //   description: "faster and cheaper reasoning model particularly good at coding, math, and science."
+  // },
   {
     value: "gpt-4o-mini",
     label: "GPT-4o Mini",
