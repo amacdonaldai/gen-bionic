@@ -2,172 +2,126 @@
 import React, { useState } from "react";
 import { useModel } from '@/app/context/ModelContext';
 import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 
+interface ModelOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+const MODEL_OPTIONS: ModelOption[] = [
+  {
+    value: "o1-preview",
+    label: "o1-preview",
+    description: "reasoning model designed to solve hard problems across domains."
+  },
+  {
+    value: "o1-mini",
+    label: "o1-mini",
+    description: "faster and cheaper reasoning model particularly good at coding, math, and science."
+  },
+  {
+    value: "gpt-4o-mini",
+    label: "GPT-4o Mini",
+    description: "Balanced, small, excellent for general use"
+  },
+  {
+    value: "gpt-4o-2024-05-13",
+    label: "GPT-4o",
+    description: "Balanced, excellent for analytics and data"
+  },
+  {
+    value: "gpt-4.1-2025-04-14",
+    label: "GPT-4.1",
+    description: "Latest and most advanced GPT model with enhanced capabilities"
+  },
+  {
+    value: "claude-3-5-sonnet-20240620",
+    label: "Claude 3.5 Sonnet",
+    description: "Smartest of them all."
+  },
+  {
+    value: "claude-3-7-sonnet-latest",
+    label: "Claude 3.7 Sonnet",
+    description: "Most advanced model with exceptional reasoning and coding capabilities."
+  },
+  {
+    value: "llama3-70b-8192",
+    label: "Llama 3",
+    description: "Robust, handles large context well"
+  },
+  {
+    value: "gemini",
+    label: "Gemini",
+    description: "Versatile, suitable for diverse tasks"
+  },
+  {
+    value: "gemma-7b-it",
+    label: "Gemma",
+    description: "❗Compact, efficient for smaller files"
+  },
+  {
+    value: "mixtral-8x7b-32768",
+    label: "Mixtral",
+    description: "❗Innovative, ideal for creative projects"
+  },
+];
+
 export function ModelSelector() {
-    const { model, setModel } = useModel(); // Access model state from context
-    const [tooltipContent, setTooltipContent] = useState('');
-    const [tooltipPosition, setTooltipPosition] = useState({ top: 0 });
+  const { model, setModel } = useModel();
+  const [tooltipContent, setTooltipContent] = useState<string>('');
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number }>({ top: 0 });
 
-    const handleMouseEnter = (tooltip, e) => {
-        const rect = e.target.getBoundingClientRect();
-        setTooltipContent(tooltip);
-        setTooltipPosition({ top: rect.top });
-    };
+  const handleMouseEnter = (description: string, e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltipContent(description);
+    setTooltipPosition({ top: rect.top });
+  };
 
-    const handleValueChange = (value) => {
-        setModel(value);
-        setTooltipContent('');
-    };
+  const handleValueChange = (value: string) => {
+    setModel(value);
+    setTooltipContent('');
+  };
 
-    return (
-      <div className="relative">
-        <Select defaultValue={model} onValueChange={handleValueChange}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select a model" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Model</SelectLabel>
+  return (
+    <div className="relative">
+      <Select defaultValue={model} onValueChange={handleValueChange}>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="Select a model" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectLabel>Model</SelectLabel>
+            {MODEL_OPTIONS.map((option) => (
               <SelectItem
-                value="o1-preview"
-                onMouseEnter={e =>
-                  handleMouseEnter(
-                    'reasoning model designed to solve hard problems across domains.',
-                    e
-                  )
-                }
+                key={option.value}
+                value={option.value}
+                onMouseEnter={(e) => handleMouseEnter(option.description, e)}
                 onMouseLeave={() => setTooltipContent('')}
+                className="cursor-pointer"
               >
-                o1-preview
+                {option.label}
               </SelectItem>
-              <SelectItem
-                value="o1-mini"
-                onMouseEnter={e =>
-                  handleMouseEnter(
-                    'faster and cheaper reasoning model particularly good at coding, math, and science.',
-                    e
-                  )
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                o1-mini
-              </SelectItem>
-              <SelectItem
-                value="gpt-3.5-turbo"
-                onMouseEnter={e =>
-                  handleMouseEnter('Less creative, but fast', e)
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                GPT 3.5
-              </SelectItem>
-              <SelectItem
-                value="gpt-4o-mini"
-                onMouseEnter={e =>
-                  handleMouseEnter(
-                    'Balanced, small, excellent for general use',
-                    e
-                  )
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                GPT-4o Mini
-              </SelectItem>
-              <SelectItem
-                value="gpt-4"
-                onMouseEnter={e =>
-                  handleMouseEnter('Highly creative, detailed responses', e)
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                GPT-4
-              </SelectItem>
-              <SelectItem
-                value="gpt-4-turbo"
-                onMouseEnter={e =>
-                  handleMouseEnter('Very fast, great for quick tasks', e)
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                GPT-4 Turbo
-              </SelectItem>
-              <SelectItem
-                value="gpt-4o-2024-05-13"
-                onMouseEnter={e =>
-                  handleMouseEnter(
-                    'Balanced, excellent for analytics and data',
-                    e
-                  )
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                GPT-4o
-              </SelectItem>
-              <SelectItem
-                value="claude-3-5-sonnet-20240620"
-                onMouseEnter={e => handleMouseEnter('Smartest of them all.', e)}
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                Claude 3.5 Sonnet
-              </SelectItem>
-              <SelectItem
-                value="llama3-70b-8192"
-                onMouseEnter={e =>
-                  handleMouseEnter('Robust, handles large context well', e)
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                Llama 3
-              </SelectItem>
-              <SelectItem
-                value="gemini"
-                onMouseEnter={e =>
-                  handleMouseEnter('Versatile, suitable for diverse tasks', e)
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                Gemini
-              </SelectItem>
-              <SelectItem
-                value="gemma-7b-it"
-                onMouseEnter={e =>
-                  handleMouseEnter('❗Compact, efficient for smaller files', e)
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                Gemma
-              </SelectItem>
-              <SelectItem
-                value="mixtral-8x7b-32768"
-                onMouseEnter={e =>
-                  handleMouseEnter(
-                    '❗Innovative, ideal for creative projects',
-                    e
-                  )
-                }
-                onMouseLeave={() => setTooltipContent('')}
-              >
-                Mixtral
-              </SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        {tooltipContent && (
-          <div
-            className="absolute left-full ml-2 mt-[-1rem] bg-[#f4f4f5] text-black text-xs p-2 rounded w-64"
-            style={{ top: tooltipPosition.top }}
-          >
-            {tooltipContent}
-          </div>
-        )}
-      </div>
-    )
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      {tooltipContent && (
+        <div
+          className="absolute left-full ml-2 mt-[-1rem] bg-[#f4f4f5] text-black text-xs p-2 rounded w-64"
+          style={{ top: tooltipPosition.top }}
+        >
+          {tooltipContent}
+        </div>
+      )}
+    </div>
+  );
 }

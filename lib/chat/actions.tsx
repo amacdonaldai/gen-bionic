@@ -94,9 +94,8 @@ async function confirmPurchase(symbol: string, price: number, amount: number) {
         {
           id: nanoid(),
           role: 'system',
-          content: `[User has purchased ${amount} shares of ${symbol} at ${price}. Total cost = ${
-            amount * price
-          }]`
+          content: `[User has purchased ${amount} shares of ${symbol} at ${price}. Total cost = ${amount * price
+            }]`
         }
       ]
     })
@@ -143,8 +142,8 @@ type SystemMessage = {
 type Message = UserMessage | AssistantMessage | SystemMessage
 
 async function getWebSearches(query) {
-  const endpoint = "https://api.bing.microsoft.com/v7.0/search";      
-  const urlQuery = encodeURIComponent(query);      
+  const endpoint = "https://api.bing.microsoft.com/v7.0/search";
+  const urlQuery = encodeURIComponent(query);
   const apiKey = process.env.BING_SEARCH_API_KEY
   const options = {
     mkt: "en-us",
@@ -159,7 +158,7 @@ async function getWebSearches(query) {
     ...options,
   }).toString();
 
-  const url = `${endpoint}?${queryParams}`;      
+  const url = `${endpoint}?${queryParams}`;
   const headers = {
     "Ocp-Apim-Subscription-Key": apiKey,
     "User-Agent":
@@ -167,20 +166,20 @@ async function getWebSearches(query) {
   };
 
   try {
-    const response = await fetch(url, { headers });      
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const linksArray = [];
     const data = await response.json();
-    let resultString : string = `Search Results for "${query}": `;
+    let resultString: string = `Search Results for "${query}": `;
 
     if (data.webPages && data.webPages.value) {
       resultString += "Web Pages result: ";
       data.webPages.value.forEach((page) => {
         resultString += `- ${page.name}: ${page.url} ,`;
-        linksArray.push({"link": page.url, "name": page.name})
+        linksArray.push({ "link": page.url, "name": page.name })
         if (page.snippet) resultString += `  Snippet: ${page.snippet} ,`;
         resultString += ",";
       });
@@ -217,7 +216,7 @@ async function getWebSearches(query) {
       });
     }
 
-    return {resultString, linksArray};
+    return { resultString, linksArray };
   } catch (error) {
     console.error("Error fetching search results:", error);
     return "Something went wrong. Please try again."
@@ -241,32 +240,32 @@ async function getWebSearches(query) {
 async function fetchArxiv(query, time) {
   console.log(query, time);
   try {
-    const apiUrl = `http://export.arxiv.org/api/query?search_query=${encodeURIComponent(query +" "+time)}${time ? "&start=0&max_results=40" : ""}`;
+    const apiUrl = `http://export.arxiv.org/api/query?search_query=${encodeURIComponent(query + " " + time)}${time ? "&start=0&max_results=40" : ""}`;
     const response = await fetch(apiUrl);
-    
+
     if (!response.ok) {
       return "HTTP error!";
     }
-    
+
     const xml = await response.text();
     const json = await parseStringPromise(xml);
-    
+
     if (time) {
       let parsedDate;
       if (time.length === 4) parsedDate = new Date(time + '-01-01T00:00:00Z');
       else if (time.length === 7) parsedDate = new Date(time + '-01T00:00:00Z');
       else return "Invalid time format";
-      
+
       if (!json || !json.feed || !json.feed.entry) return "No relevant data found";
-      
+
       const filteredData = json.feed.entry.filter((it) => {
         const publishedDate = new Date(it.published[0]);
         return publishedDate >= parsedDate;
       });
-      
+
       console.log(filteredData.length);
-      
-      if (filteredData.length === 0) return "No relevant data found within the specified time";      
+
+      if (filteredData.length === 0) return "No relevant data found within the specified time";
       return filteredData;
     } else {
       return json;
@@ -298,7 +297,7 @@ async function submitUserMessage(
 ) {
   'use server'
 
-  const openaiOriginal = new OpenAI({apiKey: process.env.OPENAI_API_KEY});
+  const openaiOriginal = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const groq = createOpenAI({
     baseURL: 'https://api.groq.com/openai/v1',
@@ -314,7 +313,7 @@ async function submitUserMessage(
   // Determine the API based on the model name
   const isGeminiModel = model === 'gemini'
   const isGroqModel = groqModels.includes(model)
-  const isAnthropicModel= model ==='claude-3-5-sonnet-20240620'
+  const isAnthropicModel = model === 'claude-3-5-sonnet-20240620' || model === 'claude-3-7-sonnet-latest'
 
   const api = isGroqModel ? groq : isGeminiModel ? gemini : isAnthropicModel ? anthropic : openai
   const aiState = getMutableAIState<typeof AI>()
@@ -360,7 +359,7 @@ async function submitUserMessage(
     })
   }
 
- 
+
   aiState.update({
     ...aiState.get(),
     messages: [
@@ -415,7 +414,7 @@ async function submitUserMessage(
 
       return textNode
     },
-    tools: isSimpleModel ? undefined :  {
+    tools: isSimpleModel ? undefined : {
       searchWeb: tool({
         description: 'A tool for performing web searches.',
         parameters: z.object({ query: z.string().describe('The query for web search') }),
@@ -425,20 +424,20 @@ async function submitUserMessage(
           try {
             const { text, finishReason, usage } = await generateText({
               system: 'You will should receive the query, identify its primary context, and generate a concise and precise query that captures the main intent. For example, if the input query is get the latest AI news, the model should output latest AI news.',
-              model: openai('gpt-3.5-turbo'),
+              model: openai('gpt-4o-mini'),
               prompt: query,
             });
             concisedQuery = text;
           } catch (error) {
             console.error("An error occurred:", error);
           }
-          
-          yield <ToolCallLoading concisedQuery={concisedQuery}/>
+
+          yield <ToolCallLoading concisedQuery={concisedQuery} />
           await sleep(1000);
           const toolCallId = nanoid();
-          const {resultString, linksArray}  = await getWebSearches(query);
+          const { resultString, linksArray } = await getWebSearches(query);
           const finalToolResult = resultString;
-          const toolCallMeta = {concisedQuery, linksArray}
+          const toolCallMeta = { concisedQuery, linksArray }
 
 
           aiState.done({
@@ -475,7 +474,7 @@ async function submitUserMessage(
           // Let's get the text response          
           const newResult = await streamUI({
             model: api(model),
-            initial: <ToolCallLoading concisedQuery={concisedQuery}/>,
+            initial: <ToolCallLoading concisedQuery={concisedQuery} />,
             system: `You are a helpful assistant, you extract the relevant data from the given data and try to answer precisely, only share links if asked or required`,
             messages: [
               ...aiState.get().messages
@@ -483,7 +482,7 @@ async function submitUserMessage(
             text: ({ content, done, delta }) => {
               if (!textStream) {
                 textStream = createStreamableValue('')
-                textNode = <ToolMessage content={textStream.value} toolCallMeta={toolCallMeta}/>
+                textNode = <ToolMessage content={textStream.value} toolCallMeta={toolCallMeta} />
               }
 
               if (done) {
@@ -523,7 +522,7 @@ async function submitUserMessage(
           prompt: z.string().describe('The prompt for image generation'),
         }),
         generate: async function* ({ prompt }) {
-          yield <ToolImageLoading/>
+          yield <ToolImageLoading />
           await sleep(1000)
           const toolCallId = nanoid()
 
@@ -579,9 +578,9 @@ async function submitUserMessage(
             text: ({ content, done, delta }) => {
               if (!textStream) {
                 textStream = createStreamableValue('');
-                textNode = <ToolImages content={textStream.value}/>
+                textNode = <ToolImages content={textStream.value} />
               }
-        
+
               if (done) {
                 textStream.done();
                 aiState.done({
@@ -616,15 +615,15 @@ async function submitUserMessage(
       }),
       arxivApiCaller: tool({
         description: 'A tool for calling arxiv api to search research papers.',
-        parameters: z.object({ 
-          query: z.string().describe('The search query to be included in the arXiv URL parameter'), 
+        parameters: z.object({
+          query: z.string().describe('The search query to be included in the arXiv URL parameter'),
           time: z.string().describe(`The specific date for which to search results, formatted as a year-month (e.g., 2023-05), or can be empty string if not specified, remember today is ${getFormattedDate()}`)
-        }),        
+        }),
         generate: async function* ({ query, time }) {
-          yield <ToolLoadingAnimate searchQuery={query+" "+time} >{"Calling the arvix tool "}</ToolLoadingAnimate>
+          yield <ToolLoadingAnimate searchQuery={query + " " + time} >{"Calling the arvix tool "}</ToolLoadingAnimate>
           await sleep(1000);
           const toolCallId = nanoid();
-          const result = await fetchArxiv(query , time);
+          const result = await fetchArxiv(query, time);
 
           aiState.done({
             ...aiState.get(),
@@ -668,7 +667,7 @@ async function submitUserMessage(
             text: ({ content, done, delta }) => {
               if (!textStream) {
                 textStream = createStreamableValue('')
-                textNode = <ArxivToolMessage content={textStream.value} query={query+" "+time} />
+                textNode = <ArxivToolMessage content={textStream.value} query={query + " " + time} />
               }
 
               if (done) {
@@ -684,7 +683,7 @@ async function submitUserMessage(
                         {
                           type: 'text',
                           text: content,
-                          toolName : 'arxivApiCaller',
+                          toolName: 'arxivApiCaller',
                           meta: `${query} ${time}`
                         }
                       ]
@@ -806,11 +805,11 @@ export const getUIStateFromAIState = (aiState: Chat) => {
               </BotCard>
             ) : null
           })
-        ) 
-        : message.role === 'user' ? (
-          <UserMessage>{message?.content[0]?.text as string}</UserMessage>
-        ) 
-        : message.role === 'assistant' ? (
+        )
+          : message.role === 'user' ? (
+            <UserMessage>{message?.content[0]?.text as string}</UserMessage>
+          )
+            : message.role === 'assistant' ? (
               typeof message.content === 'string' ? (
                 <BotMessage content={message.content} />
               ) : (
@@ -825,6 +824,6 @@ export const getUIStateFromAIState = (aiState: Chat) => {
                   </BotCard>
                 ) : null)
               )
-        ) : null
+            ) : null
     }))
 }
