@@ -29,7 +29,7 @@ import {
 import { saveChat } from '@/app/actions'
 import { auth } from '@/auth'
 import { Events } from '@/components/stocks/events'
-import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage } from '@/components/stocks/message'
+import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage } from '@/components/stocks/message'
 import { Stocks } from '@/components/stocks/stocks'
 import { Chat } from '@/lib/types'
 import {
@@ -498,6 +498,102 @@ async function submitUserMessage(
           )
         },
       }),
+      wikipediaSearch: tool({
+        description: 'A tool for searching Wikipedia articles.',
+        parameters: z.object({
+          query: z.string().describe('The search query to look up on Wikipedia')
+        }),
+        generate: async function* ({ query }) {
+          yield <ToolWikipediaLoading query={query} />
+          await sleep(1000)
+          const toolCallId = nanoid()
+
+          // Fetch Wikipedia data
+          const response = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(query)}&origin=*`)
+          const data = await response.json()
+
+          const searchResults = data.query?.search || []
+          const firstResult = searchResults[0]
+
+          let content = ''
+          if (firstResult) {
+            const pageResponse = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&pageids=${firstResult.pageid}&origin=*`)
+            const pageData = await pageResponse.json()
+            content = pageData.query?.pages?.[firstResult.pageid]?.extract || 'No content found'
+          }
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'wikipediaSearch',
+                    toolCallId,
+                    args: { query }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'wikipediaSearch',
+                    toolCallId,
+                    result: { content, query }
+                  }
+                ]
+              }
+            ]
+          })
+
+          const newResult = await streamUI({
+            model: selectedModel,
+            initial: <ToolWikipediaLoading query={query} />,
+            system: 'You are a helpful assistant that summarizes Wikipedia content in a clear and concise way.',
+            messages: [
+              ...aiState.get().messages
+            ],
+            text: ({ content, done, delta }) => {
+              if (!textStream) {
+                textStream = createStreamableValue('')
+                textNode = <WikipediaToolMessage content={textStream.value} query={query} />
+              }
+
+              if (done) {
+                textStream.done()
+                aiState.done({
+                  ...aiState.get(),
+                  messages: [
+                    ...aiState.get().messages,
+                    {
+                      id: nanoid(),
+                      role: 'assistant',
+                      content: [
+                        {
+                          type: 'text',
+                          text: content,
+                          toolName: 'wikipediaSearch'
+                        }
+                      ]
+                    }
+                  ]
+                })
+              } else {
+                textStream.update(delta)
+              }
+              return textNode
+            }
+          })
+          return newResult.value
+        }
+      }),
     },
   });
 
@@ -568,12 +664,6 @@ export const AI = createAI<AIState, UIState>({
 })
 
 export const getUIStateFromAIState = (aiState: Chat) => {
-  // aiState.messages.map(m => {
-  //   console.log(m.role)
-  //   console.log(m.content)
-  //   console.log('----------------------------')
-  // })
-
   return aiState.messages
     .filter(message => message.role !== 'system')
     .map((message, index) => ({
@@ -615,6 +705,10 @@ export const getUIStateFromAIState = (aiState: Chat) => {
                 ) : message.content[0]?.toolName === 'arxivApiCaller' ? (
                   <BotCard>
                     <ArxivToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
+                  </BotCard>
+                ) : message.content[0]?.toolName === 'wikipediaSearch' ? (
+                  <BotCard>
+                    <WikipediaToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
                   </BotCard>
                 ) : null)
               )
