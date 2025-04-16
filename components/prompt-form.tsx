@@ -170,32 +170,6 @@ export function PromptForm({
     setIsUploading(false)
   }
 
-  const latestModel = async (input: string) => {
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ prompt: input, model: model })
-      })
-      if (!res.ok) {
-        throw new Error('Error fetching response')
-      }
-      const data = await res.json()
-      setMessages(currentMessages => [
-        ...currentMessages,
-        {
-          id: nanoid(),
-          display: <BotMessage content={data.res} />
-        }
-      ])
-      console.log('Data', data.res)
-    } catch (error) {
-      console.error('Error:', error)
-    }
-  }
-
   const compressImage = async (file: File) => {
     const options = {
       maxSizeMB: 0.5, // Compress to a smaller size if necessary
@@ -215,7 +189,7 @@ export function PromptForm({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    if (!session) return toast.error('You need to login first')
+    // if (!session) return toast.error('You need to login first')
     if (window.innerWidth < 600) {
       e.currentTarget['message']?.blur()
     }
@@ -273,49 +247,23 @@ export function PromptForm({
     ])
 
     try {
-      // Create the payload with the compressed and encoded images
-      const payload = {
-        message: value,
-        model: model,
-        images: uploadedImages,
-        file: uploadedPdfFiles,
-        csv: uploadingCSVFiles
-      }
-
-      // Log the JSON payload
-      console.log('Sending JSON payload:', JSON.stringify(payload))
-
-      if (model === 'o1-preview' || model === 'o1-mini') {
-        await latestModel(value)
-        return
-      } else {
-        const responseMessage = await submitUserMessage(
-          value,
-          model,
-          uploadedImages,
-          uploadedPdfFiles,
-          uploadingCSVFiles
-        )
-        setMessages(currentMessages => [...currentMessages, responseMessage])
-        console.log(uploadingCSVFiles)
-        setUploadedImages([])
-        setUploadedPdfFiles([])
-        setUploadingCSVFiles([])
-      }
+      const responseMessage = await submitUserMessage(
+        value,
+        model,
+        uploadedImages,
+        uploadedPdfFiles,
+        uploadingCSVFiles
+      )
+      setMessages(currentMessages => [...currentMessages, responseMessage])
+      console.log(uploadingCSVFiles)
+      setUploadedImages([])
+      setUploadedPdfFiles([])
+      setUploadingCSVFiles([])
     } catch (error) {
       console.error('Error submitting message:', error)
       toast(
         <div className="text-red-600">
-          You have reached your message limit! Please try again later, or{' '}
-          <a
-            className="underline"
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://vercel.com/templates/next.js/gemini-ai-chatbot"
-          >
-            deploy your own version
-          </a>
-          .
+          Something went wrong! Please try again.
         </div>
       )
     }
@@ -450,7 +398,7 @@ export function PromptForm({
               size="icon"
               disabled={input === '' && uploadedImages.length === 0}
               className="bg-black shadow-none hover:bg-gray-800 rounded-full"
-              style={{background: "black"}}
+              style={{ background: "black" }}
             >
               <IconArrowElbow />
               <span className="sr-only">Send message</span>

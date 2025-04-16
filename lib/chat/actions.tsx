@@ -1,10 +1,11 @@
 // @ts-nocheck
 import 'server-only'
 import { anthropic } from '@ai-sdk/anthropic';
+import { groq } from '@ai-sdk/groq';
+import { google } from '@ai-sdk/google';
+import { openai } from '@ai-sdk/openai'
 import { parseStringPromise } from 'xml2js';
 
-
-import { createOpenAI, openai } from '@ai-sdk/openai'
 import {
   createAI,
   createStreamableUI,
@@ -28,7 +29,7 @@ import {
 import { saveChat } from '@/app/actions'
 import { auth } from '@/auth'
 import { Events } from '@/components/stocks/events'
-import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage } from '@/components/stocks/message'
+import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage, SlideToolMessage, ToolSlideLoading } from '@/components/stocks/message'
 import { Stocks } from '@/components/stocks/stocks'
 import { Chat } from '@/lib/types'
 import {
@@ -40,75 +41,9 @@ import {
 
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
+import { executeWebSearch } from './websearch';
+import { generateSlides } from './slideGenerator';
 
-async function confirmPurchase(symbol: string, price: number, amount: number) {
-  'use server'
-
-  const aiState = getMutableAIState<typeof AI>()
-
-  const purchasing = createStreamableUI(
-    <div className="inline-flex items-start gap-1 md:items-center">
-      {spinner}
-      <p className="mb-2">
-        Purchasing {amount} ${symbol}...
-      </p>
-    </div>
-  )
-
-  const systemMessage = createStreamableUI(null)
-
-  runAsyncFnWithoutBlocking(async () => {
-    await sleep(1000)
-
-    purchasing.update(
-      <div className="inline-flex items-start gap-1 md:items-center">
-        {spinner}
-        <p className="mb-2">
-          Purchasing {amount} ${symbol}... working on it...
-        </p>
-      </div>
-    )
-
-    await sleep(1000)
-
-    purchasing.done(
-      <div>
-        <p className="mb-2">
-          You have successfully purchased {amount} ${symbol}. Total cost:{' '}
-          {formatNumber(amount * price)}
-        </p>
-      </div>
-    )
-
-    systemMessage.done(
-      <SystemMessage>
-        You have purchased {amount} shares of {symbol} at ${price}. Total cost ={' '}
-        {formatNumber(amount * price)}.
-      </SystemMessage>
-    )
-
-    aiState.done({
-      ...aiState.get(),
-      messages: [
-        ...aiState.get().messages,
-        {
-          id: nanoid(),
-          role: 'system',
-          content: `[User has purchased ${amount} shares of ${symbol} at ${price}. Total cost = ${amount * price
-            }]`
-        }
-      ]
-    })
-  })
-
-  return {
-    purchasingUI: purchasing.value,
-    newMessage: {
-      id: nanoid(),
-      display: systemMessage.value
-    }
-  }
-}
 type TextPart = {
   type: 'text'
   text: string
@@ -140,102 +75,6 @@ type SystemMessage = {
 }
 
 type Message = UserMessage | AssistantMessage | SystemMessage
-
-async function getWebSearches(query) {
-  const endpoint = "https://api.bing.microsoft.com/v7.0/search";
-  const urlQuery = encodeURIComponent(query);
-  const apiKey = process.env.BING_SEARCH_API_KEY
-  const options = {
-    mkt: "en-us",
-    safeSearch: "moderate",
-    textDecorations: true,
-    textFormat: "raw",
-    count: 10,
-    offset: 0,
-  };
-  const queryParams = new URLSearchParams({
-    q: urlQuery,
-    ...options,
-  }).toString();
-
-  const url = `${endpoint}?${queryParams}`;
-  const headers = {
-    "Ocp-Apim-Subscription-Key": apiKey,
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
-  };
-
-  try {
-    const response = await fetch(url, { headers });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const linksArray = [];
-    const data = await response.json();
-    let resultString: string = `Search Results for "${query}": `;
-
-    if (data.webPages && data.webPages.value) {
-      resultString += "Web Pages result: ";
-      data.webPages.value.forEach((page) => {
-        resultString += `- ${page.name}: ${page.url} ,`;
-        linksArray.push({ "link": page.url, "name": page.name })
-        if (page.snippet) resultString += `  Snippet: ${page.snippet} ,`;
-        resultString += ",";
-      });
-    }
-
-    if (data.images && data.images.value) {
-      resultString += "Images result: ";
-      data.images.value.forEach((image) => {
-        resultString += `- ${image.name}: ${image.contentUrl}, `;
-        resultString += `  Thumbnail: ${image.thumbnailUrl},`;
-      });
-    }
-
-    if (data.videos && data.videos.value) {
-      resultString += "Videos result: ";
-      data.videos.value.forEach((video) => {
-        resultString += `- ${video.name}: ${video.contentUrl} ,`;
-        if (video.description)
-          resultString += `  Description: ${video.description} ,`;
-        resultString += `  Thumbnail: ${video.thumbnailUrl}, `;
-      });
-    }
-
-    if (data.news && data.news.value) {
-      resultString += "News result:,";
-      data.news.value.forEach((news) => {
-        resultString += `- ${news.name}: ${news.url},`;
-        if (news.description)
-          resultString += `  Description: ${news.description},`;
-        if (news.image && news.image.thumbnail) {
-          resultString += `  Thumbnail: ${news.image.thumbnail.contentUrl},`;
-        }
-        resultString += ",";
-      });
-    }
-
-    return { resultString, linksArray };
-  } catch (error) {
-    console.error("Error fetching search results:", error);
-    return "Something went wrong. Please try again."
-  }
-}
-
-// async function fetchArxiv(query) {
-//   console.log(query)
-//   try {
-//     const response = await fetch(`http://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=0&max_results=10`);
-//     if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-//     const xml = await response.text();
-//     const json = await parseStringPromise(xml);
-//     return json;
-//   } catch (error) {
-//     console.error('Error fetching or converting data:', error);
-//     throw error;
-//   }
-// }
 
 async function fetchArxiv(query, time) {
   console.log(query, time);
@@ -276,17 +115,37 @@ async function fetchArxiv(query, time) {
   }
 }
 
-
-
-
-
-
 const getFormattedDate = () => {
   const today = new Date();
   const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
   return today.toLocaleDateString('en-CA', options); // 'en-CA' locale formats date as YYYY-MM-DD
 };
 
+const getModel = (model: string) => {
+  // OpenAI models
+  if (model.startsWith('gpt')) {
+    return openai(model);
+  }
+
+  // Anthropic models
+  if (model.startsWith('claude')) {
+    return anthropic(model);
+  }
+
+  // Groq models
+  const groqModels = ['llama3-70b-8192', 'gemma-7b-it', 'mixtral-8x7b-32768'];
+  if (groqModels.includes(model)) {
+    return groq(model);
+  }
+
+  // Google models
+  if (model === 'gemini') {
+    return google(model);
+  }
+
+  // Default to OpenAI if no specific provider matches
+  return openai('gpt-4o');
+}
 
 async function submitUserMessage(
   content: string,
@@ -298,24 +157,8 @@ async function submitUserMessage(
   'use server'
 
   const openaiOriginal = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const selectedModel = getModel(model);
 
-  const groq = createOpenAI({
-    baseURL: 'https://api.groq.com/openai/v1',
-    apiKey: process.env.GROQ_API_KEY
-  })
-  const gemini = createOpenAI({
-    baseURL: 'https://my-openai-gemini-omega-three.vercel.app/v1',
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  })
-  // List of Groq models
-  const isSimpleModel = ['o1-preview', 'o1-mini'].includes(model);
-  const groqModels = ['llama3-70b-8192', 'gemma-7b-it', 'mixtral-8x7b-32768']
-  // Determine the API based on the model name
-  const isGeminiModel = model === 'gemini'
-  const isGroqModel = groqModels.includes(model)
-  const isAnthropicModel = model === 'claude-3-5-sonnet-20240620' || model === 'claude-3-7-sonnet-latest'
-
-  const api = isGroqModel ? groq : isGeminiModel ? gemini : isAnthropicModel ? anthropic : openai
   const aiState = getMutableAIState<typeof AI>()
 
   // Prepare the message content
@@ -372,16 +215,13 @@ async function submitUserMessage(
     ]
   })
 
-
-
   let textStream: undefined | ReturnType<typeof createStreamableValue<string>>
   let textNode: undefined | React.ReactNode
 
   const result = await streamUI({
-    model: api(model),
+    model: selectedModel,
     initial: <SpinnerMessage />,
-    temperature: isSimpleModel ? 1 : 0.7,
-    system: isSimpleModel ? undefined : `You are a helpful assistant`,
+    system: `You are a helpful assistant`,
     messages: [
       ...aiState.get().messages.map((message: any) => ({
         role: message.role,
@@ -414,17 +254,19 @@ async function submitUserMessage(
 
       return textNode
     },
-    tools: isSimpleModel ? undefined : {
-      searchWeb: tool({
-        description: 'A tool for performing web searches.',
-        parameters: z.object({ query: z.string().describe('The query for web search') }),
+    tools: {
+      searchWeb: {
+        description: 'A tool for doing web search.',
+        parameters: z.object({
+          query: z.string().describe('The query to be included in the web search based on the user query and content to be searched')
+        }),
         generate: async function* ({ query }) {
-          let concisedQuery = '';
 
+          let concisedQuery = '';
           try {
             const { text, finishReason, usage } = await generateText({
-              system: 'You will should receive the query, identify its primary context, and generate a concise and precise query that captures the main intent. For example, if the input query is get the latest AI news, the model should output latest AI news.',
-              model: openai('gpt-4o-mini'),
+              system: 'You will receive the query, identify its primary context, and generate a concise and precise query that captures the main intent. For example, if the input query is get the latest AI news, the model should output latest AI news.',
+              model: openai('gpt-3.5-turbo'),
               prompt: query,
             });
             concisedQuery = text;
@@ -435,10 +277,7 @@ async function submitUserMessage(
           yield <ToolCallLoading concisedQuery={concisedQuery} />
           await sleep(1000);
           const toolCallId = nanoid();
-          const { resultString, linksArray } = await getWebSearches(query);
-          const finalToolResult = resultString;
-          const toolCallMeta = { concisedQuery, linksArray }
-
+          const { text, sources } = await executeWebSearch(concisedQuery)
 
           aiState.done({
             ...aiState.get(),
@@ -464,16 +303,14 @@ async function submitUserMessage(
                     type: 'tool-result',
                     toolName: 'searchWeb',
                     toolCallId,
-                    result: finalToolResult
+                    result: { text, sources }
                   }
                 ]
               }
             ]
           })
-
-          // Let's get the text response          
           const newResult = await streamUI({
-            model: api(model),
+            model: model.startsWith('gpt') ? openai(model) : model.startsWith('claude') ? anthropic(model) : model.startsWith("llama") ? perplexity(model) : openai('gpt-4o'),
             initial: <ToolCallLoading concisedQuery={concisedQuery} />,
             system: `You are a helpful assistant, you extract the relevant data from the given data and try to answer precisely, only share links if asked or required`,
             messages: [
@@ -482,7 +319,7 @@ async function submitUserMessage(
             text: ({ content, done, delta }) => {
               if (!textStream) {
                 textStream = createStreamableValue('')
-                textNode = <ToolMessage content={textStream.value} toolCallMeta={toolCallMeta} />
+                textNode = <BotMessage content={textStream.value} />
               }
 
               if (done) {
@@ -498,7 +335,6 @@ async function submitUserMessage(
                         {
                           type: 'text',
                           text: content,
-                          meta: toolCallMeta,
                           toolName: 'searchWeb'
                         }
                       ]
@@ -515,7 +351,7 @@ async function submitUserMessage(
             newResult.value
           )
         },
-      }),
+      },
       generateImage: tool({
         description: 'A tool for generating images using DALL·E 3.',
         parameters: z.object({
@@ -568,49 +404,11 @@ async function submitUserMessage(
               }
             ]
           })
-          const newResult = await streamUI({
-            model: api(model),
-            initial: <h1>Generating image...</h1>,
-            system: `You are a helpful assistant. You extract relevant data from the given data and try to answer precisely, only share links if asked or required.`,
-            messages: [
-              ...aiState.get().messages,
-            ],
-            text: ({ content, done, delta }) => {
-              if (!textStream) {
-                textStream = createStreamableValue('');
-                textNode = <ToolImages content={textStream.value} />
-              }
-
-              if (done) {
-                textStream.done();
-                aiState.done({
-                  ...aiState.get(),
-                  messages: [
-                    ...aiState.get().messages,
-                    {
-                      id: nanoid(),
-                      role: 'assistant',
-                      content: [
-                        {
-                          type: 'text',
-                          text: content,
-                        },
-                        {
-                          type: 'image',
-                          url: imageUrl,
-                        },
-                      ],
-                    },
-                  ],
-                });
-              } else {
-                textStream.update(delta);
-              }
-              return textNode;
-            },
-          });
-
-          return newResult.value;
+          return (
+            <BotCard>
+              <ToolImages imageUrl={imageUrl} />
+            </BotCard>
+          )
         }
       }),
       arxivApiCaller: tool({
@@ -658,7 +456,7 @@ async function submitUserMessage(
 
           // Let's get the text response          
           const newResult = await streamUI({
-            model: api(model),
+            model: selectedModel,
             initial: <h1>Extracting data...</h1>,
             system: `You are a helpful assistant, you process the json data and extract the information such as title, published, links, summary`,
             messages: [
@@ -701,6 +499,192 @@ async function submitUserMessage(
           )
         },
       }),
+      wikipediaSearch: tool({
+        description: 'A tool for searching Wikipedia articles.',
+        parameters: z.object({
+          query: z.string().describe('The search query to look up on Wikipedia')
+        }),
+        generate: async function* ({ query }) {
+          yield <ToolWikipediaLoading query={query} />
+          await sleep(1000)
+          const toolCallId = nanoid()
+
+          // Fetch Wikipedia data
+          const response = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch=${encodeURIComponent(query)}&origin=*`)
+          const data = await response.json()
+
+          const searchResults = data.query?.search || []
+          const firstResult = searchResults[0]
+
+          let content = ''
+          if (firstResult) {
+            const pageResponse = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&pageids=${firstResult.pageid}&origin=*`)
+            const pageData = await pageResponse.json()
+            content = pageData.query?.pages?.[firstResult.pageid]?.extract || 'No content found'
+          }
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'wikipediaSearch',
+                    toolCallId,
+                    args: { query }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'wikipediaSearch',
+                    toolCallId,
+                    result: { content, query }
+                  }
+                ]
+              }
+            ]
+          })
+
+          const newResult = await streamUI({
+            model: selectedModel,
+            initial: <ToolWikipediaLoading query={query} />,
+            system: 'You are a helpful assistant that summarizes Wikipedia content in a clear and concise way.',
+            messages: [
+              ...aiState.get().messages
+            ],
+            text: ({ content, done, delta }) => {
+              if (!textStream) {
+                textStream = createStreamableValue('')
+                textNode = <WikipediaToolMessage content={textStream.value} query={query} />
+              }
+
+              if (done) {
+                textStream.done()
+                aiState.done({
+                  ...aiState.get(),
+                  messages: [
+                    ...aiState.get().messages,
+                    {
+                      id: nanoid(),
+                      role: 'assistant',
+                      content: [
+                        {
+                          type: 'text',
+                          text: content,
+                          toolName: 'wikipediaSearch'
+                        }
+                      ]
+                    }
+                  ]
+                })
+              } else {
+                textStream.update(delta)
+              }
+              return textNode
+            }
+          })
+          return newResult.value
+        }
+      }),
+      generateSlides: tool({
+        description: 'A tool for generating presentation slides about a topic.',
+        parameters: z.object({
+          topic: z.string().describe('The topic for the presentation slides'),
+          slideCount: z.number().optional().describe('The number of slides to generate (default is 5)')
+        }),
+        generate: async function* ({ topic, slideCount = 5 }) {
+          yield <ToolSlideLoading topic={topic} />
+          await sleep(1000);
+          const toolCallId = nanoid();
+
+          // Generate slides using our server action
+          const slides = await generateSlides(topic, slideCount);
+
+          console.log(slides);
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'generateSlides',
+                    toolCallId,
+                    args: { topic, slideCount }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'generateSlides',
+                    toolCallId,
+                    result: { slides, topic }
+                  }
+                ]
+              }
+            ]
+          });
+
+          const newResult = await streamUI({
+            model: selectedModel,
+            initial: <ToolSlideLoading topic={topic} />,
+            system: 'You are a helpful assistant that generates presentation slides. Briefly explain the content of the slides you\'ve created.',
+            messages: [
+              ...aiState.get().messages
+            ],
+            text: ({ content, done, delta }) => {
+              if (!textStream) {
+                textStream = createStreamableValue('');
+                textNode = <SlideToolMessage content={textStream.value} slides={slides} />;
+              }
+
+              if (done) {
+                textStream.done();
+                aiState.done({
+                  ...aiState.get(),
+                  messages: [
+                    ...aiState.get().messages,
+                    {
+                      id: nanoid(),
+                      role: 'assistant',
+                      content: [
+                        {
+                          type: 'text',
+                          text: content,
+                          toolName: 'generateSlides',
+                          slides
+                        }
+                      ]
+                    }
+                  ]
+                });
+              } else {
+                textStream.update(delta);
+              }
+              return textNode;
+            }
+          });
+
+          return newResult.value;
+        }
+      })
     },
   });
 
@@ -721,10 +705,7 @@ export type UIState = {
 }[]
 
 export const AI = createAI<AIState, UIState>({
-  actions: {
-    submitUserMessage,
-    confirmPurchase
-  },
+  actions: { submitUserMessage },
   initialUIState: [],
   initialAIState: { chatId: nanoid(), messages: [] },
   onGetUIState: async () => {
@@ -774,12 +755,6 @@ export const AI = createAI<AIState, UIState>({
 })
 
 export const getUIStateFromAIState = (aiState: Chat) => {
-  // aiState.messages.map(m => {
-  //   console.log(m.role)
-  //   console.log(m.content)
-  //   console.log('----------------------------')
-  // })
-
   return aiState.messages
     .filter(message => message.role !== 'system')
     .map((message, index) => ({
@@ -821,6 +796,14 @@ export const getUIStateFromAIState = (aiState: Chat) => {
                 ) : message.content[0]?.toolName === 'arxivApiCaller' ? (
                   <BotCard>
                     <ArxivToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
+                  </BotCard>
+                ) : message.content[0]?.toolName === 'wikipediaSearch' ? (
+                  <BotCard>
+                    <WikipediaToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
+                  </BotCard>
+                ) : message.content[0]?.toolName === 'generateSlides' ? (
+                  <BotCard>
+                    <SlideToolMessage content={message?.content[0]?.text} slides={message.content[0].slides} />
                   </BotCard>
                 ) : null)
               )
