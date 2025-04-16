@@ -41,7 +41,7 @@ export interface User extends Record<string, any> {
 }
 
 export type ContentItem = {
-  type: 'paragraph' | 'bullet' | 'list' | 'quote';
+  type: 'paragraph' | 'list' | 'quote';
   content: string;
 };
 

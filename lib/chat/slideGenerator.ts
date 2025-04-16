@@ -7,10 +7,8 @@ import { z } from 'zod';
 
 // Define the Zod schema for content items with the correct structure
 const contentItemSchema = z.object({
-    type: z.enum(['paragraph', 'bullet', 'list', 'quote']),
-    // Only one of these fields should be present based on the type
+    type: z.enum(['paragraph', 'list', 'quote']),
     content: z.string().optional(),
-    bullet: z.array(z.string()).optional(),
     list: z.array(z.string()).optional(),
     quote: z.string().optional(),
 });
@@ -54,17 +52,15 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
             CONTENT FORMAT REQUIREMENTS:
             Each slide MUST contain a mix of different content items with these types:
             - 'paragraph': A type with a 'content' field containing text paragraphs
-            - 'bullet': A type with a 'bullet' array of bullet points
             - 'list': A type with a 'list' array of numbered or sequential items
             - 'quote': A type with a 'quote' field containing a quotation
             
             IMPORTANT: Each content item must ONLY include the appropriate field based on its type:
             - paragraph items must have a 'content' field
-            - bullet items must have a 'bullet' array
             - list items must have a 'list' array
             - quote items must have a 'quote' field
             
-            For contentType, use a descriptive string like "Mix of paragraph and bullet"
+            For contentType, use a descriptive string like "Mix of paragraph and list"
             
             CONTENT QUALITY REQUIREMENTS:
             1. Include SPECIFIC facts, statistics and examples (use real numbers, dates, names)
@@ -73,9 +69,8 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
             
             EXAMPLES OF GOOD CONTENT ITEMS:
             1. paragraph: {"type": "paragraph", "content": "The global AI market reached **$136.6 billion** in 2022."}
-            2. bullet: {"type": "bullet", "bullet": ["**Healthcare applications** grew by 45% in 2022", "Companies report 35.4% productivity increase"]}
-            3. list: {"type": "list", "list": ["1. Research phase (2-3 months)", "2. Development phase (4-6 months)"]}
-            4. quote: {"type": "quote", "quote": ""Artificial intelligence is the new electricity." - Andrew Ng"}
+            2. list: {"type": "list", "list": ["1. Research phase (2-3 months)", "2. Development phase (4-6 months)"]}
+            3. quote: {"type": "quote", "quote": ""Artificial intelligence is the new electricity." - Andrew Ng"}
             
             The response MUST have exactly ${validatedSlideCount} slides with varied content types.`,
             temperature: 0.7,
@@ -92,15 +87,7 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
                     switch (item.type) {
                         case 'paragraph':
                             return { type: 'paragraph', content: item.content || '' };
-                        case 'bullet':
-                            // Convert bullet array to string content prefixed with bullet points
-                            return {
-                                type: 'bullet',
-                                content: item.bullet ?
-                                    item.bullet.map((b: string) => `- ${b}`).join('\n') : ''
-                            };
                         case 'list':
-                            // Convert list array to string content
                             return {
                                 type: 'list',
                                 content: item.list ?

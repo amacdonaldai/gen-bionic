@@ -117,14 +117,6 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                     />
                 );
 
-            case 'bullet':
-                return (
-                    <div key={idx} className="flex mb-3">
-                        <span className={`mr-3 mt-1.5 text-lg ${getTextColor(slideType) === 'text-white' ? 'text-white' : 'text-blue-500'}`}>•</span>
-                        <div className="flex-1" dangerouslySetInnerHTML={{ __html: formattedContent }} />
-                    </div>
-                );
-
             case 'list':
                 return (
                     <div key={idx} className="mb-4 ml-4">
@@ -159,9 +151,9 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
     };
 
     return (
-        <div className="relative p-4 h-full flex flex-col">
+        <div className="relative pb-4 h-full flex flex-col">
             {/* Slide content */}
-            <div className="flex-1 overflow-hidden mb-4">
+            <div className="flex-1 overflow-hidden mb-4 border border-gray-200 rounded-xl shadow-lg">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={currentSlide}

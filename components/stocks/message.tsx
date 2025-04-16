@@ -518,7 +518,7 @@ export function SlideToolMessage({
         <img className="size-6 object-contain" src="/images/gemini.png" alt="gemini logo" />
       </div>
       <div className="ml-4 flex-1 space-y-2 overflow-hidden px-1">
-        <div className="bg-white border border-gray-200 rounded-lg p-2 h-[600px] w-full">
+        <div className="rounded-lg h-[500px] aspect-16/9 w-full">
           <PresentationSlides slides={slides} />
         </div>
         <MemoizedReactMarkdown
