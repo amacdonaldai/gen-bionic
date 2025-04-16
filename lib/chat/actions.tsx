@@ -29,7 +29,7 @@ import {
 import { saveChat } from '@/app/actions'
 import { auth } from '@/auth'
 import { Events } from '@/components/stocks/events'
-import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage } from '@/components/stocks/message'
+import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage, SlideToolMessage, ToolSlideLoading } from '@/components/stocks/message'
 import { Stocks } from '@/components/stocks/stocks'
 import { Chat } from '@/lib/types'
 import {
@@ -42,6 +42,7 @@ import {
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
 import { executeWebSearch } from './websearch';
+import { generateSlides } from './slideGenerator';
 
 type TextPart = {
   type: 'text'
@@ -594,6 +595,94 @@ async function submitUserMessage(
           return newResult.value
         }
       }),
+      generateSlides: tool({
+        description: 'A tool for generating presentation slides about a topic.',
+        parameters: z.object({
+          topic: z.string().describe('The topic for the presentation slides'),
+          slideCount: z.number().optional().describe('The number of slides to generate (default is 5)')
+        }),
+        generate: async function* ({ topic, slideCount = 5 }) {
+          yield <ToolSlideLoading topic={topic} />
+          await sleep(1000);
+          const toolCallId = nanoid();
+
+          // Generate slides using our server action
+          const slides = await generateSlides(topic, slideCount);
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'generateSlides',
+                    toolCallId,
+                    args: { topic, slideCount }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'generateSlides',
+                    toolCallId,
+                    result: { slides, topic }
+                  }
+                ]
+              }
+            ]
+          });
+
+          const newResult = await streamUI({
+            model: selectedModel,
+            initial: <ToolSlideLoading topic={topic} />,
+            system: 'You are a helpful assistant that generates presentation slides. Briefly explain the content of the slides you\'ve created.',
+            messages: [
+              ...aiState.get().messages
+            ],
+            text: ({ content, done, delta }) => {
+              if (!textStream) {
+                textStream = createStreamableValue('');
+                textNode = <SlideToolMessage content={textStream.value} slides={slides} />;
+              }
+
+              if (done) {
+                textStream.done();
+                aiState.done({
+                  ...aiState.get(),
+                  messages: [
+                    ...aiState.get().messages,
+                    {
+                      id: nanoid(),
+                      role: 'assistant',
+                      content: [
+                        {
+                          type: 'text',
+                          text: content,
+                          toolName: 'generateSlides',
+                          slides
+                        }
+                      ]
+                    }
+                  ]
+                });
+              } else {
+                textStream.update(delta);
+              }
+              return textNode;
+            }
+          });
+
+          return newResult.value;
+        }
+      })
     },
   });
 
@@ -709,6 +798,10 @@ export const getUIStateFromAIState = (aiState: Chat) => {
                 ) : message.content[0]?.toolName === 'wikipediaSearch' ? (
                   <BotCard>
                     <WikipediaToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
+                  </BotCard>
+                ) : message.content[0]?.toolName === 'generateSlides' ? (
+                  <BotCard>
+                    <SlideToolMessage content={message?.content[0]?.text} slides={message.content[0].slides} />
                   </BotCard>
                 ) : null)
               )
