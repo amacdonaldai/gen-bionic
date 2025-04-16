@@ -41,10 +41,12 @@ export interface User extends Record<string, any> {
 }
 
 export type ContentItem = {
-  type: 'paragraph' | 'list' | 'quote';
+  type: 'paragraph' | 'list' | 'quote' | 'image';
   content?: string;  // For paragraph type only
   list?: string[];   // For list type
   quote?: string;    // For quote type
+  imagePrompt?: string; // For image type
+  imageUrl?: string;  // For image type - will be populated after generation
 };
 
 export type Slide = {

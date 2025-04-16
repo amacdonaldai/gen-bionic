@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import {
     ChevronLeft,
     ChevronRight,
@@ -13,10 +14,12 @@ import {
     SquareArrowRightIcon,
     CheckCircle2Icon,
     Quote,
-    ListIcon
+    ImageIcon,
+    Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slide, ContentItem } from '@/lib/types';
+import { generateImages } from '@/lib/chat/generateImage';
 
 // Color options for different slide types
 const titleGradients = [
@@ -51,15 +54,80 @@ interface PresentationSlidesProps {
 
 const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) => {
     const [currentSlide, setCurrentSlide] = useState(0);
+    const [processedSlides, setProcessedSlides] = useState<Slide[]>(slides);
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Find image prompts and generate images on component mount
+    useEffect(() => {
+        async function processSlides() {
+            // Skip if no slides or no image prompts
+            const hasImagePrompts = slides.some(slide =>
+                slide.content.some(item =>
+                    item.type === 'image' && item.imagePrompt && !item.imageUrl
+                )
+            );
+
+            if (!hasImagePrompts || slides.length === 0) {
+                setProcessedSlides(slides);
+                return;
+            }
+
+            setIsLoading(true);
+
+            try {
+                // Extract all image prompts
+                const prompts: string[] = [];
+                const promptMap: { slideIndex: number, contentIndex: number }[] = [];
+
+                slides.forEach((slide, slideIndex) => {
+                    slide.content.forEach((item, contentIndex) => {
+                        if (item.type === 'image' && item.imagePrompt && !item.imageUrl) {
+                            prompts.push(item.imagePrompt);
+                            promptMap.push({ slideIndex, contentIndex });
+                        }
+                    });
+                });
+
+                if (prompts.length === 0) {
+                    setProcessedSlides(slides);
+                    return;
+                }
+
+                // Generate images
+                const imageUrls = await generateImages(prompts);
+
+                // Create a new copy of slides with image URLs added
+                const newSlides = JSON.parse(JSON.stringify(slides));
+
+                imageUrls.forEach((url, index) => {
+                    if (url && promptMap[index]) {
+                        const { slideIndex, contentIndex } = promptMap[index];
+                        if (newSlides[slideIndex]?.content[contentIndex]) {
+                            newSlides[slideIndex].content[contentIndex].imageUrl = url;
+                        }
+                    }
+                });
+
+                setProcessedSlides(newSlides);
+            } catch (error) {
+                console.error('Error generating images:', error);
+                setProcessedSlides(slides);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        processSlides();
+    }, [slides]);
 
     const slideColors = useMemo(() => {
         const getRandomItem = (array: string[]) => array[Math.floor(Math.random() * array.length)];
 
-        if (!slides || slides.length === 0) return {};
+        if (!processedSlides || processedSlides.length === 0) return {};
 
         const colors: Record<string, string> = {};
 
-        slides.forEach((slide, index) => {
+        processedSlides.forEach((slide, index) => {
             const id = `${slide.type}-${index}`;
             if (slide.type === 'title') {
                 colors[id] = getRandomItem(titleGradients);
@@ -69,9 +137,18 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
         });
 
         return colors;
-    }, [slides]);
+    }, [processedSlides]);
 
-    if (!slides || slides.length === 0) {
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full border border-gray-200 rounded-xl shadow-sm">
+                <Loader2 strokeWidth={1} className="h-12 w-12 text-blue-500 animate-spin mb-4" />
+                <p className="text-gray-600 text-sm">Preparing your presentation...</p>
+            </div>
+        );
+    }
+
+    if (!processedSlides || processedSlides.length === 0) {
         return (
             <div className="flex items-center justify-center h-full">
                 <p className="text-gray-500">No slides available</p>
@@ -126,6 +203,13 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
             .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>');
     };
 
+    // Split slide content into text and image
+    const splitSlideContent = (content: ContentItem[]) => {
+        const textContent = content.filter(item => item.type !== 'image');
+        const imageContent = content.find(item => item.type === 'image');
+        return { textContent, imageContent, hasImage: !!imageContent };
+    };
+
     const formatContentItem = (item: ContentItem, idx: number, slideType: string) => {
         switch (item.type) {
             case 'paragraph':
@@ -172,16 +256,45 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                     </div>
                 );
 
+            case 'image':
+                if (!item.imageUrl) {
+                    // Show placeholder
+                    return (
+                        <div key={idx} className="h-full flex flex-col items-center justify-center">
+                            <div className="border border-gray-200 rounded-lg p-4 w-full h-full bg-gray-50 flex flex-col items-center justify-center">
+                                <ImageIcon className="h-10 w-10 text-gray-400 mb-2" />
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div key={idx} className="h-full flex flex-col items-center justify-center">
+                        <div className="relative w-full h-full overflow-hidden rounded-lg">
+                            <Image
+                                src={item.imageUrl}
+                                alt={item.imagePrompt || "Slide image"}
+                                width={400}
+                                height={400}
+                                style={{ objectFit: 'contain' }}
+                                className="rounded-lg"
+                                priority={true}
+                            />
+                        </div>
+                    </div>
+                );
+
             default:
                 return null;
         }
     };
 
-    const currentSlideData = slides[currentSlide];
+    const currentSlideData = processedSlides[currentSlide];
+    const { textContent, imageContent, hasImage } = splitSlideContent(currentSlideData.content);
 
     const renderTitleSlideContent = () => {
         const paragraphItem = currentSlideData.content.find(item => item.type === 'paragraph');
-        return paragraphItem && paragraphItem.content ? paragraphItem.content : '';
+        return paragraphItem?.content || '';
     };
 
     return (
@@ -205,14 +318,37 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                                 </div>
                                 <h1 className="text-3xl font-bold mb-6">{currentSlideData.title}</h1>
                                 <div className="w-24 h-1 bg-white opacity-70 rounded-full mb-6"></div>
-                                {currentSlideData.content.length > 0 && (
+                                {textContent.length > 0 && (
                                     <p className="text-base opacity-90 max-w-2xl">
                                         {renderTitleSlideContent()}
                                     </p>
                                 )}
                             </div>
+                        ) : hasImage ? (
+                            // Side-by-side layout for slides with images
+                            <div className={`p-8 flex-1 flex flex-col ${getTextColor(currentSlideData.type)}`}>
+                                <div className={`flex items-center mb-6 ${getTextColor(currentSlideData.type) === 'text-white' ? 'border-b border-white/20' : 'border-b border-gray-200'} pb-4`}>
+                                    <div className={`mr-3 p-2 rounded-lg ${getTextColor(currentSlideData.type) === 'text-white' ? 'bg-white/10' : 'bg-blue-100'}`}>
+                                        {getIconForType(currentSlideData.type)}
+                                    </div>
+                                    <h2 className="text-2xl font-bold">{currentSlideData.title}</h2>
+                                </div>
+                                <div className="flex-1 flex overflow-hidden items-center">
+                                    {/* Left side - Text content */}
+                                    <div className="w-1/2 pr-4 overflow-auto custom-scrollbar">
+                                        {textContent.map((contentItem, idx) =>
+                                            formatContentItem(contentItem, idx, currentSlideData.type)
+                                        )}
+                                    </div>
+
+                                    {/* Right side - Image */}
+                                    <div className="w-1/2 pl-4 flex items-center">
+                                        {imageContent && formatContentItem(imageContent, 999, currentSlideData.type)}
+                                    </div>
+                                </div>
+                            </div>
                         ) : (
-                            // Regular slide layout
+                            // Regular slide layout without image
                             <div className={`p-8 flex-1 flex flex-col ${getTextColor(currentSlideData.type)}`}>
                                 <div className={`flex items-center mb-6 ${getTextColor(currentSlideData.type) === 'text-white' ? 'border-b border-white/20' : 'border-b border-gray-200'} pb-4`}>
                                     <div className={`mr-3 p-2 rounded-lg ${getTextColor(currentSlideData.type) === 'text-white' ? 'bg-white/10' : 'bg-blue-100'}`}>
@@ -221,7 +357,7 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                                     <h2 className="text-2xl font-bold">{currentSlideData.title}</h2>
                                 </div>
                                 <div className="flex-1 overflow-auto pr-4 custom-scrollbar">
-                                    {currentSlideData.content.map((contentItem, idx) =>
+                                    {textContent.map((contentItem, idx) =>
                                         formatContentItem(contentItem, idx, currentSlideData.type)
                                     )}
                                 </div>
@@ -248,18 +384,18 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                 </Button>
 
                 <div className="text-sm text-gray-500">
-                    {currentSlide + 1} / {slides.length}
+                    {currentSlide + 1} / {processedSlides.length}
                 </div>
 
                 <Button
                     variant="outline"
                     size="icon"
                     onClick={() => {
-                        if (currentSlide < slides.length - 1) {
+                        if (currentSlide < processedSlides.length - 1) {
                             setCurrentSlide(currentSlide + 1);
                         }
                     }}
-                    disabled={currentSlide === slides.length - 1}
+                    disabled={currentSlide === processedSlides.length - 1}
                     className="rounded-full"
                 >
                     <ChevronRight className="h-4 w-4" />
