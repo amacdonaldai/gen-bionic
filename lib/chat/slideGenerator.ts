@@ -7,10 +7,11 @@ import { z } from 'zod';
 
 // Define the Zod schema for content items with the correct structure
 const contentItemSchema = z.object({
-    type: z.enum(['paragraph', 'list', 'quote']),
+    type: z.enum(['paragraph', 'list', 'quote', 'image']),
     content: z.string().optional(),
     list: z.array(z.string()).optional(),
     quote: z.string().optional(),
+    imagePrompt: z.string().optional(),
 });
 
 // Define the Zod schema for slides with more meaningful slide types
@@ -54,13 +55,27 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
             - 'paragraph': A type with a 'content' field containing text paragraphs
             - 'list': A type with a 'list' array of numbered or sequential items
             - 'quote': A type with a 'quote' field containing a quotation
-            
+            - 'image': A type with an 'imagePrompt' field containing a detailed prompt for image generation
+
+            If a slide includes an image, it may only contain two content items:
+            - image
+            - additional content item (either 'paragraph', 'list', or 'quote')
+
             IMPORTANT: Each content item must ONLY include the appropriate field based on its type:
             - paragraph items must have a 'content' field
             - list items must have a 'list' array
             - quote items must have a 'quote' field
+            - image items must have an 'imagePrompt' field
             
             For contentType, use a descriptive string like "Mix of paragraph and list"
+            
+            IMAGE REQUIREMENTS:
+            - Include ONLY 1-2 images TOTAL across all slides combined
+            - Choose only the most important slide(s) to include an image - preferably one that would benefit most from visual representation
+            - Put images in content-focused slides, not the title or conclusion
+            - Image prompts should be detailed, visual, and specific
+            - Make image prompts realistic and clear - describe the exact visualization needed
+            - For charts/graphs, describe exactly what data should be shown
             
             CONTENT QUALITY REQUIREMENTS:
             1. Include SPECIFIC facts, statistics and examples (use real numbers, dates, names)
@@ -69,8 +84,9 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
             
             EXAMPLES OF GOOD CONTENT ITEMS:
             1. paragraph: {"type": "paragraph", "content": "The global AI market reached **$136.6 billion** in 2022."}
-            2. list: {"type": "list", "list": ["1. Research phase (2-3 months)", "2. Development phase (4-6 months)"]}
+            2. list: {"type": "list", "list": ["Research phase (2-3 months)", "Development phase (4-6 months)"]}
             3. quote: {"type": "quote", "quote": ""Artificial intelligence is the new electricity." - Andrew Ng"}
+            4. image: {"type": "image", "imagePrompt": "A professional bar chart showing AI market growth from 2018-2022, with $136.6B highlighted for 2022"}
             
             The response MUST have exactly ${validatedSlideCount} slides with varied content types.`,
             temperature: 0.7,
@@ -96,6 +112,11 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
                             return {
                                 type: 'quote',
                                 quote: item.quote || ''
+                            };
+                        case 'image':
+                            return {
+                                type: 'image',
+                                imagePrompt: item.imagePrompt || ''
                             };
                         default:
                             return {
