@@ -49,5 +49,5 @@ export type Slide = {
   title: string;
   type: 'title' | 'overview' | 'detail' | 'comparison' | 'statistics' | 'case-study' | 'conclusion';
   content: ContentItem[];
-  contentType: 'mixed';
+  contentType: string;
 };

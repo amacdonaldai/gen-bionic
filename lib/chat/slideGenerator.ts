@@ -1,17 +1,18 @@
 'use server'
 
-import { generateObject } from 'ai';
+import { generateObject, NoObjectGeneratedError } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { Slide, ContentItem } from '@/lib/types';
 import { z } from 'zod';
 
-// Define the Zod schema for content items
+// Define the Zod schema for content items with the correct structure
 const contentItemSchema = z.object({
     type: z.enum(['paragraph', 'bullet', 'list', 'quote']),
-    content: z.string().describe('The content of the slide').optional(),
-    bullet: z.array(z.string()).describe('The bullets of the slide').optional(),
-    list: z.array(z.string()).describe('The list of the slide').optional(),
-    quote: z.string().describe('The quote of the slide').optional(),
+    // Only one of these fields should be present based on the type
+    content: z.string().optional(),
+    bullet: z.array(z.string()).optional(),
+    list: z.array(z.string()).optional(),
+    quote: z.string().optional(),
 });
 
 // Define the Zod schema for slides with more meaningful slide types
@@ -19,7 +20,7 @@ const slideSchema = z.object({
     title: z.string(),
     type: z.enum(['title', 'overview', 'detail', 'comparison', 'statistics', 'case-study', 'conclusion']),
     content: z.array(contentItemSchema),
-    contentType: z.literal('mixed')
+    contentType: z.string() // Allow any string for contentType
 });
 
 export async function generateSlides(topic: string, slideCount: number = 5): Promise<Slide[]> {
@@ -51,35 +52,83 @@ export async function generateSlides(topic: string, slideCount: number = 5): Pro
             4. Last slide MUST be a 'conclusion' type with actionable takeaways
             
             CONTENT FORMAT REQUIREMENTS:
-            Each slide MUST contain a mix of different content item types:
-            - 'paragraph': Full sentences forming cohesive paragraphs (2-3 sentences)
-            - 'bullet': Individual point starting with a dash (-)
-            - 'list': Numbered or sequential items
-            - 'quote': Notable quotation or highlighted text
+            Each slide MUST contain a mix of different content items with these types:
+            - 'paragraph': A type with a 'content' field containing text paragraphs
+            - 'bullet': A type with a 'bullet' array of bullet points
+            - 'list': A type with a 'list' array of numbered or sequential items
+            - 'quote': A type with a 'quote' field containing a quotation
+            
+            IMPORTANT: Each content item must ONLY include the appropriate field based on its type:
+            - paragraph items must have a 'content' field
+            - bullet items must have a 'bullet' array
+            - list items must have a 'list' array
+            - quote items must have a 'quote' field
+            
+            For contentType, use a descriptive string like "Mix of paragraph and bullet"
             
             CONTENT QUALITY REQUIREMENTS:
             1. Include SPECIFIC facts, statistics and examples (use real numbers, dates, names)
             2. Every slide (except title) MUST use at least 2 different content item types
-            3. 'paragraph' items: Write 2-3 cohesive sentences with proper transitions
-            4. 'bullet' items: Be substantive and specific, not generic
-            5. 'list' items: Use for sequential steps, rankings, or prioritized items
-            6. 'quote' items: Include attribution where appropriate
-            7. Use markdown formatting (*italics* for emphasis, **bold** for key points)
+            3. Use markdown formatting (*italics* for emphasis, **bold** for key points)
             
             EXAMPLES OF GOOD CONTENT ITEMS:
-            1. paragraph: "The global AI market reached **$136.6 billion** in 2022, with a projected annual growth rate of 37.3% through 2030. This exponential growth is driven primarily by enterprise adoption and integration into consumer products."
-            2. bullet: "- **Healthcare applications** grew by 45% in 2022, with *diagnostic systems* showing 98.7% accuracy in early cancer detection"
-            3. list: "1. Research phase (2-3 months): Conduct market analysis and competitor benchmarking"
-            4. quote: ""Artificial intelligence is the new electricity of our era." - Andrew Ng, Stanford University"
+            1. paragraph: {"type": "paragraph", "content": "The global AI market reached **$136.6 billion** in 2022."}
+            2. bullet: {"type": "bullet", "bullet": ["**Healthcare applications** grew by 45% in 2022", "Companies report 35.4% productivity increase"]}
+            3. list: {"type": "list", "list": ["1. Research phase (2-3 months)", "2. Development phase (4-6 months)"]}
+            4. quote: {"type": "quote", "quote": ""Artificial intelligence is the new electricity." - Andrew Ng"}
             
-            The response MUST have exactly ${validatedSlideCount} slides with varied content types, specific details, and visually diverse formatting.`,
+            The response MUST have exactly ${validatedSlideCount} slides with varied content types.`,
             temperature: 0.7,
         });
 
-        // Return the slides from the object
-        return object.slides as Slide[];
+        console.log(JSON.stringify(object, null, 2));
+
+        // Process the slides to normalize the content structure for our components
+        const processedSlides = object.slides.map((slide: any) => {
+            return {
+                ...slide,
+                content: slide.content.map((item: any) => {
+                    // Create a normalized content item based on type
+                    switch (item.type) {
+                        case 'paragraph':
+                            return { type: 'paragraph', content: item.content || '' };
+                        case 'bullet':
+                            // Convert bullet array to string content prefixed with bullet points
+                            return {
+                                type: 'bullet',
+                                content: item.bullet ?
+                                    item.bullet.map((b: string) => `- ${b}`).join('\n') : ''
+                            };
+                        case 'list':
+                            // Convert list array to string content
+                            return {
+                                type: 'list',
+                                content: item.list ?
+                                    item.list.join('\n') : ''
+                            };
+                        case 'quote':
+                            return { type: 'quote', content: item.quote || '' };
+                        default:
+                            return { type: 'paragraph', content: '' };
+                    }
+                })
+            };
+        });
+
+        // Return the processed slides
+        return processedSlides as Slide[];
     } catch (error) {
-        console.error('Error generating slides:', error);
+        if (NoObjectGeneratedError.isInstance(error)) {
+            console.log('NoObjectGeneratedError');
+            console.log('Cause:', error.cause);
+            console.log('Text:', error.text);
+            console.log('Response:', error.response);
+            console.log('Usage:', error.usage);
+            console.log('Finish Reason:', error.finishReason);
+        } else {
+            console.error('Other error:', error);
+        }
+
         // Return a basic error slide if generation fails
         return [{
             title: 'Slide Generation Error',

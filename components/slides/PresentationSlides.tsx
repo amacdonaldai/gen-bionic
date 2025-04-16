@@ -180,7 +180,7 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                                 <h1 className="text-3xl font-bold mb-6">{currentSlideData.title}</h1>
                                 <div className="w-24 h-1 bg-white opacity-70 rounded-full mb-6"></div>
                                 {currentSlideData.content.length > 0 && (
-                                    <p className="text-xl opacity-90 max-w-2xl">
+                                    <p className="text-base opacity-90 max-w-2xl">
                                         {renderTitleSlideContent()}
                                     </p>
                                 )}

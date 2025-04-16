@@ -609,6 +609,8 @@ async function submitUserMessage(
           // Generate slides using our server action
           const slides = await generateSlides(topic, slideCount);
 
+          console.log(slides);
+
           aiState.done({
             ...aiState.get(),
             messages: [
