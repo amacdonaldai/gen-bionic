@@ -403,49 +403,11 @@ async function submitUserMessage(
               }
             ]
           })
-          const newResult = await streamUI({
-            model: selectedModel,
-            initial: <h1>Generating image...</h1>,
-            system: `You are a helpful assistant. You extract relevant data from the given data and try to answer precisely, only share links if asked or required.`,
-            messages: [
-              ...aiState.get().messages,
-            ],
-            text: ({ content, done, delta }) => {
-              if (!textStream) {
-                textStream = createStreamableValue('');
-                textNode = <ToolImages content={textStream.value} />
-              }
-
-              if (done) {
-                textStream.done();
-                aiState.done({
-                  ...aiState.get(),
-                  messages: [
-                    ...aiState.get().messages,
-                    {
-                      id: nanoid(),
-                      role: 'assistant',
-                      content: [
-                        {
-                          type: 'text',
-                          text: content,
-                        },
-                        {
-                          type: 'image',
-                          url: imageUrl,
-                        },
-                      ],
-                    },
-                  ],
-                });
-              } else {
-                textStream.update(delta);
-              }
-              return textNode;
-            },
-          });
-
-          return newResult.value;
+          return (
+            <BotCard>
+              <ToolImages imageUrl={imageUrl} />
+            </BotCard>
+          )
         }
       }),
       arxivApiCaller: tool({
