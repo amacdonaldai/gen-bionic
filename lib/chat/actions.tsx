@@ -221,7 +221,14 @@ async function submitUserMessage(
   const result = await streamUI({
     model: selectedModel,
     initial: <SpinnerMessage />,
-    system: `You are a helpful assistant`,
+    system: `You are a helpful assistant
+        Tools:
+        - searchWeb: A tool for doing web search.
+        - generateImage: A tool for generating images using DALL·E 3.
+        - arxivApiCaller: A tool for calling arxiv api to search research papers.
+        - wikipediaSearch: A tool for searching Wikipedia articles.
+        - generateSlides: A tool for generating presentation slides about a topic, This will display the slides in a pptx format in the user interface and user can download the pptx file by clicking on the download button.
+    `,
     messages: [
       ...aiState.get().messages.map((message: any) => ({
         role: message.role,
@@ -643,7 +650,7 @@ async function submitUserMessage(
           const newResult = await streamUI({
             model: selectedModel,
             initial: <ToolSlideLoading topic={topic} />,
-            system: 'You are a helpful assistant that generates presentation slides. Briefly explain the content of the slides you\'ve created.',
+            system: 'You are a helpful assistant',
             messages: [
               ...aiState.get().messages
             ],
@@ -667,7 +674,7 @@ async function submitUserMessage(
                           type: 'text',
                           text: content,
                           toolName: 'generateSlides',
-                          slides
+                          content
                         }
                       ]
                     }
