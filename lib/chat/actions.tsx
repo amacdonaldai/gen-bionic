@@ -123,7 +123,7 @@ const getFormattedDate = () => {
 
 const getModel = (model: string) => {
   // OpenAI models
-  if (model.startsWith('gpt')) {
+  if (model.startsWith('gpt') || model.startsWith('o3') || model.startsWith('o4-mini')) {
     return openai(model);
   }
 
@@ -221,6 +221,7 @@ async function submitUserMessage(
   const result = await streamUI({
     model: selectedModel,
     initial: <SpinnerMessage />,
+    temperature: model.startsWith('o4-mini') ? 1 : undefined,
     system: `You are a helpful assistant
         Tools:
         - searchWeb: A tool for doing web search.
@@ -317,7 +318,7 @@ async function submitUserMessage(
             ]
           })
           const newResult = await streamUI({
-            model: model.startsWith('gpt') ? openai(model) : model.startsWith('claude') ? anthropic(model) : model.startsWith("llama") ? perplexity(model) : openai('gpt-4o'),
+            model: selectedModel,
             initial: <ToolCallLoading concisedQuery={concisedQuery} />,
             system: `You are a helpful assistant, you extract the relevant data from the given data and try to answer precisely, only share links if asked or required`,
             messages: [
@@ -606,7 +607,7 @@ async function submitUserMessage(
         description: 'A tool for generating presentation slides about a topic.',
         parameters: z.object({
           topic: z.string().describe('The topic for the presentation slides'),
-          slideCount: z.number().optional().describe('The number of slides to generate (default is 5)')
+          slideCount: z.number().describe('The number of slides to generate (default is 5)')
         }),
         generate: async function* ({ topic, slideCount = 5 }) {
           yield <ToolSlideLoading topic={topic} />
