@@ -246,7 +246,7 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                         ) : (
                             <>
                                 <Download className="h-3 w-3" />
-                                <span>Export PPTX</span>
+                                <span>Download PPTX</span>
                             </>
                         )}
                     </Button>

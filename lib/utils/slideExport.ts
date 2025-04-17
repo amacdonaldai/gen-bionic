@@ -15,13 +15,14 @@ function createHeading(
     slideTitle: string,
     colorScheme: ColorScheme
 ): void {
-    // Determine the emoji icon based on slide type
-    let iconEmoji = "📄"; // Default document icon
-    if (slideType === 'statistics') iconEmoji = "📊"; // Chart  
-    if (slideType === 'comparison') iconEmoji = "⚖️"; // Scale/comparison
-    if (slideType === 'overview') iconEmoji = "📚"; // Books
-    if (slideType === 'case-study') iconEmoji = "🔍"; // Magnifying glass
-    if (slideType === 'conclusion') iconEmoji = "✅"; // Checkmark
+    let iconEmoji = "📄";
+    if (slideType === 'statistics') iconEmoji = "📊";
+    if (slideType === 'overview') iconEmoji = "🧭";
+    if (slideType === 'detail') iconEmoji = "📄";
+    if (slideType === 'comparison') iconEmoji = "⚖️";
+    if (slideType === 'statistics') iconEmoji = "📈";
+    if (slideType === 'case-study') iconEmoji = "🕵️‍♂️";
+    if (slideType === 'conclusion') iconEmoji = "🏁";
 
     // Add icon and title in a row
     pptxSlide.addText(`${iconEmoji}  ${slideTitle}`, {
