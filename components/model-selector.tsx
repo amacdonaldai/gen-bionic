@@ -29,6 +29,26 @@ const MODEL_OPTIONS: ModelOption[] = [
   //   description: "faster and cheaper reasoning model particularly good at coding, math, and science."
   // },
   {
+    value: "o3-mini",
+    label: "GPT o3-mini",
+    description: "Latest GPT model with enhanced reasoning capabilities"
+  },
+  {
+    value: "o4-mini-2025-04-16",
+    label: "GPT o4-mini",
+    description: "Compact and efficient version of the latest GPT model"
+  },
+  {
+    value: "gpt-4.1-mini",
+    label: "GPT-4.1 Mini",
+    description: "Smaller, faster version of GPT-4.1 with good efficiency"
+  },
+  {
+    value: "gpt-4.1-nano",
+    label: "GPT-4.1 Nano",
+    description: "Ultra-compact GPT-4.1 variant optimized for speed"
+  },
+  {
     value: "gpt-4o-mini",
     label: "GPT-4o Mini",
     description: "Balanced, small, excellent for general use"

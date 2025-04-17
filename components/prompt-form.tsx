@@ -189,7 +189,7 @@ export function PromptForm({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    // if (!session) return toast.error('You need to login first')
+    if (!session) return toast.error('You need to login first')
     if (window.innerWidth < 600) {
       e.currentTarget['message']?.blur()
     }
