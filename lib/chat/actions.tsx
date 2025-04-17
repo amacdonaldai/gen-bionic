@@ -643,7 +643,7 @@ async function submitUserMessage(
           const newResult = await streamUI({
             model: selectedModel,
             initial: <ToolSlideLoading topic={topic} />,
-            system: 'You are a helpful assistant that generates presentation slides. Briefly explain the content of the slides you\'ve created.',
+            system: 'You are a helpful assistant',
             messages: [
               ...aiState.get().messages
             ],
@@ -667,7 +667,7 @@ async function submitUserMessage(
                           type: 'text',
                           text: content,
                           toolName: 'generateSlides',
-                          slides
+                          content
                         }
                       ]
                     }
