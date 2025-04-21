@@ -29,7 +29,7 @@ import {
 import { saveChat } from '@/app/actions'
 import { auth } from '@/auth'
 import { Events } from '@/components/stocks/events'
-import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage, SlideToolMessage, ToolSlideLoading } from '@/components/stocks/message'
+import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage, SlideToolMessage, ToolSlideLoading, ExportPdfButton, ResearchAgentLoading, ResearchAgentMessage } from '@/components/stocks/message'
 import { Stocks } from '@/components/stocks/stocks'
 import { Chat } from '@/lib/types'
 import {
@@ -43,6 +43,7 @@ import { generateText, tool } from 'ai';
 import { z } from 'zod';
 import { executeWebSearch } from './websearch';
 import { generateSlides } from './slideGenerator';
+import { researchAgent } from './research-agent';
 
 type TextPart = {
   type: 'text'
@@ -675,7 +676,7 @@ async function submitUserMessage(
                           type: 'text',
                           text: content,
                           toolName: 'generateSlides',
-                          content
+                          slides: slides,
                         }
                       ]
                     }
@@ -690,7 +691,113 @@ async function submitUserMessage(
 
           return newResult.value;
         }
-      })
+      }),
+      exportToPdf: {
+        description: 'A tool for exporting research content to PDF format.',
+        parameters: z.object({
+          content: z.string().describe('The content to be exported to PDF'),
+          title: z.string().optional().describe('The title for the PDF document')
+        }),
+        generate: async function* ({ content, title = 'Research Document' }) {
+          yield (
+            <BotCard>
+              <ExportPdfButton content={content} title={title} />
+            </BotCard>
+          )
+
+          await sleep(1000)
+
+          const toolCallId = nanoid()
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'exportToPdf',
+                    toolCallId,
+                    args: { content, title }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'exportToPdf',
+                    toolCallId,
+                    result: { content, title },
+                  }
+                ]
+              }
+            ]
+          })
+
+          return (
+            <BotCard>
+              <ExportPdfButton content={content} title={title} />
+            </BotCard>
+          )
+        }
+      },
+      researchAgent: {
+        description: 'A tool for doing research on a topic.',
+        parameters: z.object({
+          topic: z.string().describe('The topic to be researched'),
+          additional_context: z.string().optional().describe('Additional context to be used for the research')
+        }),
+        generate: async function* ({ topic, additional_context = '' }) {
+          yield <ResearchAgentLoading topic={topic} />
+          await sleep(1000);
+          const toolCallId = nanoid();
+          const { text, sources } = await researchAgent(topic, additional_context)
+
+          aiState.done({
+            ...aiState.get(),
+            messages: [
+              ...aiState.get().messages,
+              {
+                id: nanoid(),
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolName: 'researchAgent',
+                    toolCallId,
+                    args: { topic, additional_context }
+                  }
+                ]
+              },
+              {
+                id: nanoid(),
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'researchAgent',
+                    toolCallId,
+                    result: { text, sources }
+                  }
+                ]
+              }
+            ]
+          })
+
+
+          return (
+            <BotCard>
+              <ResearchAgentMessage content={text} />
+            </BotCard>
+          )
+        },
+      },
     },
   });
 
@@ -779,6 +886,14 @@ export const getUIStateFromAIState = (aiState: Chat) => {
             ) : tool.toolName === 'showStockPurchase' ? (
               <BotCard>
                 <Purchase props={tool.result} />
+              </BotCard>
+            ) : tool.toolName === 'exportToPdf' ? (
+              <BotCard>
+                <ExportPdfButton content={tool.result.content} title={tool.result.title} />
+              </BotCard>
+            ) : tool.toolName === 'researchAgent' ? (
+              <BotCard>
+                <ResearchAgentMessage content={tool.result.text} />
               </BotCard>
             ) : tool.toolName === 'getEvents' ? (
               <BotCard>

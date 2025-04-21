@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/accordion"
 import { DownloadIcon, EnterFullScreenIcon, ViewHorizontalIcon } from '@radix-ui/react-icons'
 import { Button } from '../ui/button'
+import { generatePDF } from '@/lib/utils/pdfUtils'
+import { Download, Loader2 } from 'lucide-react'
 
 
 // Different types of message bubbles.
@@ -576,6 +578,140 @@ export function ToolSlideLoading({ topic }: { topic: string }) {
       <div className="ml-4 flex-1 space-y-2 overflow-hidden px-1">
         <div className="animate-pulse">Generating slides for {topic.length > 0 ? `"${topic}"` : "presentation"}</div>
       </div>
+    </div>
+  )
+}
+
+
+export function ExportPdfButton({
+  content,
+  title = 'Research Document'
+}: {
+  content: string
+  title?: string
+}) {
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleExport = async () => {
+    try {
+      setIsGenerating(true)
+      setError(null)
+
+      // Use the simplified PDF generation function from our utility
+      const success = await generatePDF(content, title);
+
+      if (!success) {
+        setError('Failed to generate PDF. Please try again.');
+      }
+
+      setIsGenerating(false);
+    } catch (err) {
+      console.error('PDF generation error:', err)
+      setError('Failed to generate PDF. Please try again.')
+      setIsGenerating(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col ">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <button
+          onClick={handleExport}
+          disabled={isGenerating}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:pointer-events-none"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Downloading...</span>
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              <span>Download PDF</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {error && (
+        <div className="text-red-500 text-sm">{error}</div>
+      )}
+    </div>
+  )
+}
+
+export function ResearchAgentLoading({ topic }: { topic: string }) {
+  return (
+    <div className={cn('group relative flex items-start')}>
+      <div className="bg-background flex size-[25px] shrink-0 select-none items-center justify-center rounded-lg border shadow-sm">
+        <img
+          className="size-6 object-contain"
+          src="https://gen.bionicdiamond.com/images/gemini.png"
+          alt="gemini logo"
+        />
+      </div>
+      <div className="ml-4 flex-1 space-y-2 overflow-hidden px-1">
+        <div className="animate-pulse">Generating research report for {topic.length > 0 ? `"${topic}"` : "research topic"}</div>
+      </div>
+    </div>
+  )
+}
+
+export function ResearchAgentMessage({ content }: { content: string }) {
+  return (
+    <div className=" flex-1 space-y-2 overflow-hidden px-6 border-2 border-gray-200 rounded-lg pb-8">
+      <MemoizedReactMarkdown
+        className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
+        remarkPlugins={[remarkGfm, remarkMath]}
+        components={{
+          h1({ children }) {
+            return <h1 className="mb-4 mt-6 border-b pb-1 text-2xl">{children}</h1>
+          },
+          h2({ children }) {
+            return <h2 className="mb-2 mt-5 text-xl font-semibold">{children}</h2>
+          },
+          h3({ children }) {
+            return <h3 className="mb-1 mt-4 text-lg font-medium">{children}</h3>
+          },
+          p({ children }) {
+            return <p className="mb-2 last:mb-0">{children}</p>
+          },
+          li({ children }) {
+            return <li className="mb-1">{children}</li>
+          },
+          code({ node, inline, className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || '')
+            if (inline) {
+              return (
+                <code className="bg-muted rounded px-1 py-0.5 text-sm" {...props}>
+                  {children}
+                </code>
+              )
+            }
+            return (
+              <CodeBlock
+                key={Math.random()}
+                language={(match && match[1]) || ''}
+                value={String(children).replace(/\n$/, '')}
+                {...props}
+              />
+            )
+          },
+          blockquote({ children }) {
+            return (
+              <blockquote className="border-l-4 border-gray-300 pl-4 italic text-muted-foreground">
+                {children}
+              </blockquote>
+            )
+          }
+        }}
+      >
+        {content}
+      </MemoizedReactMarkdown>
+
     </div>
   )
 }
