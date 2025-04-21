@@ -96,11 +96,12 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                     return;
                 }
 
-                // Generate images
                 const imageUrls = await generateImages(prompts);
-
-                // Update slides with image URLs
                 const newSlides = JSON.parse(JSON.stringify(slides));
+
+                // Apply successful image generations and track failed ones
+                const failedPrompts: string[] = [];
+                const failedPromptMap: { slideIndex: number, contentIndex: number }[] = [];
 
                 imageUrls.forEach((url, index) => {
                     if (url && promptMap[index]) {
@@ -108,8 +109,31 @@ const PresentationSlides: React.FC<PresentationSlidesProps> = ({ slides = [] }) 
                         if (newSlides[slideIndex]?.content[contentIndex]) {
                             newSlides[slideIndex].content[contentIndex].imageUrl = url;
                         }
+                    } else if (promptMap[index]) {
+                        // Track failed image generations
+                        const { slideIndex, contentIndex } = promptMap[index];
+                        failedPrompts.push(prompts[index]);
+                        failedPromptMap.push({ slideIndex, contentIndex });
                     }
                 });
+
+                // Retry failed image generations once
+                if (failedPrompts.length > 0) {
+                    try {
+                        const retryImageUrls = await generateImages(failedPrompts);
+
+                        retryImageUrls.forEach((url, index) => {
+                            if (url && failedPromptMap[index]) {
+                                const { slideIndex, contentIndex } = failedPromptMap[index];
+                                if (newSlides[slideIndex]?.content[contentIndex]) {
+                                    newSlides[slideIndex].content[contentIndex].imageUrl = url;
+                                }
+                            }
+                        });
+                    } catch (retryError) {
+                        console.error('Error retrying image generation:', retryError);
+                    }
+                }
 
                 setProcessedSlides(newSlides);
             } catch (error) {
@@ -293,9 +317,10 @@ const TitleSlide = ({ slideData, textContent }: { slideData: Slide, textContent:
             <h1 className="text-3xl font-bold mb-6">{slideData.title}</h1>
             <div className="w-24 h-1 bg-white opacity-70 rounded-full mb-6"></div>
             {textContent.length > 0 && paragraphItem?.content && (
-                <p className="text-base opacity-90 max-w-2xl">
-                    {paragraphItem.content}
-                </p>
+                <p
+                    className="text-base opacity-90 max-w-2xl"
+                    dangerouslySetInnerHTML={{ __html: formatMarkdown(paragraphItem.content, slideData.type) }}
+                />
             )}
         </div>
     );
@@ -465,7 +490,7 @@ function formatContentItem(item: ContentItem, idx: number, slideType: string) {
                             width={400}
                             height={400}
                             style={{ objectFit: 'contain' }}
-                            className="rounded-lg"
+                            className="rounded-lg border border-gray-200"
                             priority={true}
                         />
                     </div>
