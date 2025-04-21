@@ -675,7 +675,7 @@ async function submitUserMessage(
                           type: 'text',
                           text: content,
                           toolName: 'generateSlides',
-                          content
+                          slides: slides,
                         }
                       ]
                     }
