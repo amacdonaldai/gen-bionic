@@ -273,12 +273,6 @@ export async function generatePDF(content: string, title: string = 'Research Doc
         const contentWidth = pageWidth - (margin * 2);
         let y = margin;
 
-        // Add title
-        pdf.setFontSize(20);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(title, margin, y);
-        y += 15;
-
         // Parse and process the markdown content
         const parsedContent = parseMarkdownForPDF(content);
         console.log(parsedContent)
@@ -492,7 +486,7 @@ export async function generatePDF(content: string, title: string = 'Research Doc
                             contentWidth
                         );
 
-                        y += heightUsed + (fontSize / 3);
+                        y += heightUsed;
                     }
 
                     pdf.setFont('helvetica', 'normal');
@@ -520,11 +514,13 @@ export async function generatePDF(content: string, title: string = 'Research Doc
                     // Add bullet point
                     pdf.text('•', listIndent, y);
 
+                    console.log(listItem.text)
+
                     // Add text with proper indentation and formatting
                     y += renderFormattedText(
                         listItem.text,
                         listIndent + bulletWidth,
-                        y,
+                        y - 6,
                         listItem.formatting,
                         listContentWidth
                     );
@@ -533,8 +529,8 @@ export async function generatePDF(content: string, title: string = 'Research Doc
                 case 'numbered-list-item':
                     const numberedItem = item as any;
                     const numberedIndent = margin + 5;
-                    const numberWidth = 8;
-                    const numberedContentWidth = contentWidth - 10;
+                    const numberWidth = 10; // Increased from 8 to 10 for more space
+                    const numberedContentWidth = contentWidth - 12; // Increased spacing
 
                     // Add item number
                     pdf.text(`${numberedItem.number}.`, numberedIndent, y);
