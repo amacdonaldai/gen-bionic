@@ -66,7 +66,18 @@ type UserMessage = {
 type AssistantMessage = {
   id: string
   role: 'assistant'
-  content: string
+  content: string | Array<{
+    type: 'text'
+    text: string
+    toolName?: string
+    meta?: string
+    slides?: any
+  } | {
+    type: 'tool-call'
+    toolName: string
+    toolCallId: string
+    args: any
+  }>
 }
 
 type SystemMessage = {
@@ -75,7 +86,18 @@ type SystemMessage = {
   content: string
 }
 
-type Message = UserMessage | AssistantMessage | SystemMessage
+type ToolMessage = {
+  id: string
+  role: 'tool'
+  content: Array<{
+    type: 'tool-result'
+    toolName: string
+    toolCallId: string
+    result: any
+  }>
+}
+
+type Message = UserMessage | AssistantMessage | SystemMessage | ToolMessage
 
 async function fetchArxiv(query, time) {
   console.log(query, time);
@@ -845,11 +867,35 @@ export const AI = createAI<AIState, UIState>({
     if (session && session.user) {
       const { chatId, messages } = state
       const createdAt = new Date()
+      // const userId = 'UaPhMV6MH8hJSk9p9dTJtbIpgQG8_9RCXjyxB0z7UiI' as string
       const userId = session.user.id as string
       const path = `/chat/${chatId}`
-      const firstMessageContent = messages[0].content
-      const title = firstMessageContent[0].text.substring(0, 100)
-      // const title = 'firstMessageContent.substring(0, 100)'
+      
+      // Safely extract title from the first message
+      let title = 'New Chat'
+      if (messages.length > 0) {
+        const firstMessage = messages[0]
+        
+        if (firstMessage.role === 'user' && Array.isArray(firstMessage.content)) {
+          // User message with array content
+          const textContent = firstMessage.content.find(c => c.type === 'text')
+          if (textContent && 'text' in textContent) {
+            title = textContent.text.substring(0, 100)
+          }
+        } else if (firstMessage.role === 'assistant') {
+          // Assistant message
+          if (typeof firstMessage.content === 'string') {
+            // Plain string content
+            title = firstMessage.content.substring(0, 100)
+          } else if (Array.isArray(firstMessage.content) && firstMessage.content[0]) {
+            // Tool-based content
+            const content = firstMessage.content[0]
+            if ('text' in content) {
+              title = content.text.substring(0, 100)
+            }
+          }
+        }
+      }
 
       const chat: Chat = {
         id: chatId,
@@ -860,7 +906,13 @@ export const AI = createAI<AIState, UIState>({
         path
       }
 
-      await saveChat(chat)
+      try {
+        await saveChat(chat)
+      } catch (error) {
+        console.error('Error saving chat:', error)
+        // Don't throw the error to avoid breaking the UI
+        // The chat will still work, just won't be persisted
+      }
     } else {
       return
     }
@@ -903,7 +955,11 @@ export const getUIStateFromAIState = (aiState: Chat) => {
           })
         )
           : message.role === 'user' ? (
-            <UserMessage>{message?.content[0]?.text as string}</UserMessage>
+            <UserMessage>
+              {Array.isArray(message.content) && message.content[0]?.type === 'text' 
+                ? message.content[0].text 
+                : ''}
+            </UserMessage>
           )
             : message.role === 'assistant' ? (
               typeof message.content === 'string' ? (
