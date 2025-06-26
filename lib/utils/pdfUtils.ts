@@ -1,7 +1,11 @@
 import { jsPDF } from "jspdf";
 import { nanoid } from "nanoid";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
-// Define interfaces for parsed markdown items
+// Keep interfaces for backward compatibility
 export interface MarkdownItemBase {
     type: string;
 }
@@ -74,154 +78,179 @@ export type MarkdownItem =
  * @returns An array of structured markdown items
  */
 export function parseMarkdownForPDF(markdown: string): MarkdownItem[] {
-    const lines = markdown.split('\n');
+    // Create a virtual DOM element with the parsed markdown
+    const markdownComponent = ReactMarkdown({
+        children: markdown,
+        remarkPlugins: [remarkGfm],
+    });
+
+    // Convert the React component to HTML string
+    const htmlString = renderToStaticMarkup(markdownComponent as ReactElement);
+
+    // Parse the HTML to extract structured items
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    const elements = doc.body.children;
+
     const result: MarkdownItem[] = [];
-    let inCodeBlock = false;
-    let codeContent = '';
 
-    // Helper function to process inline formatting
-    const processInlineFormatting = (text: string) => {
-        return {
-            plainText: text
-                // Remove markdown formatting but preserve content
-                .replace(/\*\*(.*?)\*\*/g, '$1')
-                .replace(/__(.*?)__/g, '$1')
-                .replace(/\*(.*?)\*/g, '$1')
-                .replace(/_(.*?)_/g, '$1')
-                .replace(/`(.*?)`/g, '$1')
-                .replace(/\[(.*?)]\((.*?)\)/g, '$1 ($2)'),
+    // Helper function to process text nodes and find links
+    const processTextFormatting = (element: Element) => {
+        // Check for formatting elements
+        const boldElements = element.querySelectorAll('strong');
+        const linkElements = element.querySelectorAll('a');
 
-            // Track formatting positions for rendering
-            boldRanges: [...text.matchAll(/\*\*(.*?)\*\*/g), ...text.matchAll(/__(.*?)__/g)]
-                .map(match => ({
-                    text: match[1],
-                    index: match.index || 0,
-                    length: match[1].length
-                })),
+        const formatting: any = {};
 
-            linkRanges: [...text.matchAll(/\[(.*?)]\((.*?)\)/g)]
-                .map(match => ({
-                    text: match[1],
-                    url: match[2],
-                    index: match.index || 0,
-                    length: match[0].length
-                }))
-        };
+        // Process bold ranges
+        // if (boldElements.length > 0) {
+        //     formatting.boldRanges = [];
+        //     boldElements.forEach(bold => {
+        //         const text = bold.textContent || '';
+        //         // Approximate the position in the plain text
+        //         const fullText = element.textContent || '';
+        //         const index = fullText.indexOf(text);
+        //         if (index !== -1) {
+        //             formatting.boldRanges.push({
+        //                 text,
+        //                 index,
+        //                 length: text.length
+        //             });
+        //         }
+        //     });
+        // }
+
+        // Process link ranges
+        if (linkElements.length > 0) {
+            formatting.linkRanges = [];
+            linkElements.forEach(link => {
+                const text = link.textContent || '';
+                const url = link.getAttribute('href') || '';
+                // Approximate the position in the plain text
+                const fullText = element.textContent || '';
+                const index = fullText.indexOf(text);
+                if (index !== -1) {
+                    formatting.linkRanges.push({
+                        text,
+                        url,
+                        index,
+                        length: text.length
+                    });
+                }
+            });
+        }
+
+        return formatting;
     };
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+    // Process each element
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
 
-        // Handle code blocks
-        if (line.trim().startsWith('```')) {
-            if (inCodeBlock) {
-                // End of code block
-                result.push({
-                    type: 'code',
-                    text: codeContent.trim()
-                } as CodeItem);
-                codeContent = '';
-                inCodeBlock = false;
-            } else {
-                // Start of code block
-                inCodeBlock = true;
-            }
-            continue;
-        }
-
-        if (inCodeBlock) {
-            codeContent += line + '\n';
-            continue;
-        }
-
-        // Skip empty lines but add space markers
-        if (!line.trim()) {
-            result.push({ type: 'space' } as SpaceItem);
-            continue;
-        }
-
-        // Handle headings
-        if (line.startsWith('#')) {
-            const match = line.match(/^(#+)\s+(.+)$/);
-            if (match) {
-                const headingText = match[2].trim();
-                const { plainText, boldRanges } = processInlineFormatting(headingText);
-
+        // Extract the element type and content
+        switch (element.tagName.toLowerCase()) {
+            case 'h1':
+            case 'h2':
+            case 'h3':
+            case 'h4':
+            case 'h5':
+            case 'h6':
+                const level = parseInt(element.tagName.substring(1), 10);
+                const headingFormatting = processTextFormatting(element);
                 result.push({
                     type: 'heading',
-                    level: match[1].length,
-                    text: plainText,
-                    formatting: { boldRanges }
-                } as any);
-                continue;
-            }
+                    level,
+                    text: element.textContent || '',
+                    formatting: headingFormatting
+                } as HeadingItem);
+                break;
+
+            case 'p':
+                const paragraphFormatting = processTextFormatting(element);
+                result.push({
+                    type: 'paragraph',
+                    text: element.textContent || '',
+                    formatting: paragraphFormatting
+                } as ParagraphItem);
+                break;
+
+            case 'ul':
+                // Process list items
+                for (let j = 0; j < element.children.length; j++) {
+                    const li = element.children[j];
+                    const listItemFormatting = processTextFormatting(li);
+                    result.push({
+                        type: 'list-item',
+                        text: li.textContent || '',
+                        formatting: listItemFormatting
+                    } as ListItem);
+                }
+                break;
+
+            case 'ol':
+                // Process numbered list items
+                for (let j = 0; j < element.children.length; j++) {
+                    const li = element.children[j];
+                    const numberedItemFormatting = processTextFormatting(li);
+                    result.push({
+                        type: 'numbered-list-item',
+                        number: j + 1,
+                        text: li.textContent || '',
+                        formatting: numberedItemFormatting
+                    } as NumberedListItem);
+                }
+                break;
+
+            case 'pre':
+                // Extract code block
+                const code = element.querySelector('code');
+                result.push({
+                    type: 'code',
+                    text: code ? code.textContent || '' : element.textContent || '',
+                } as CodeItem);
+                break;
+
+            case 'blockquote':
+                const blockquoteFormatting = processTextFormatting(element);
+                result.push({
+                    type: 'blockquote',
+                    text: element.textContent || '',
+                    formatting: blockquoteFormatting
+                } as BlockquoteItem);
+                break;
+
+            case 'hr':
+                result.push({
+                    type: 'hr',
+                } as HorizontalRuleItem);
+                break;
+
+            case 'img':
+                const img = element as HTMLImageElement;
+                result.push({
+                    type: 'image',
+                    alt: img.alt || '',
+                    url: img.src || '',
+                } as ImageItem);
+                break;
+
+            case 'br':
+                result.push({
+                    type: 'space',
+                } as SpaceItem);
+                break;
+
+            default:
+                // For other elements, treat as paragraphs
+                if (element.textContent && element.textContent.trim()) {
+                    const defaultFormatting = processTextFormatting(element);
+                    result.push({
+                        type: 'paragraph',
+                        text: element.textContent,
+                        formatting: defaultFormatting
+                    } as ParagraphItem);
+                }
         }
-
-        // Handle list items (unordered)
-        if (line.trim().match(/^[-*+]\s+/)) {
-            const listItemText = line.replace(/^[-*+]\s+/, '').trim();
-            const { plainText, boldRanges, linkRanges } = processInlineFormatting(listItemText);
-
-            result.push({
-                type: 'list-item',
-                text: plainText,
-                formatting: { boldRanges, linkRanges }
-            } as any);
-            continue;
-        }
-
-        // Handle list items (ordered)
-        const orderedListMatch = line.trim().match(/^(\d+)\.\s+(.+)$/);
-        if (orderedListMatch) {
-            const numberedItemText = orderedListMatch[2].trim();
-            const { plainText, boldRanges, linkRanges } = processInlineFormatting(numberedItemText);
-
-            result.push({
-                type: 'numbered-list-item',
-                number: parseInt(orderedListMatch[1]),
-                text: plainText,
-                formatting: { boldRanges, linkRanges }
-            } as any);
-            continue;
-        }
-
-        // Handle blockquotes
-        if (line.trim().startsWith('>')) {
-            const blockquoteText = line.replace(/^>\s?/, '').trim();
-            const { plainText, boldRanges, linkRanges } = processInlineFormatting(blockquoteText);
-
-            result.push({
-                type: 'blockquote',
-                text: plainText,
-                formatting: { boldRanges, linkRanges }
-            } as any);
-            continue;
-        }
-
-        // Handle horizontal rules
-        if (line.trim().match(/^(\*{3,}|-{3,}|_{3,})$/)) {
-            result.push({ type: 'hr' } as HorizontalRuleItem);
-            continue;
-        }
-
-        // Handle images
-        const imageMatch = line.match(/!\[(.*?)]\((.*?)\)/);
-        if (imageMatch) {
-            result.push({
-                type: 'image',
-                alt: imageMatch[1] || '',
-                url: imageMatch[2] || ''
-            } as ImageItem);
-            continue;
-        }
-
-        // Regular paragraph
-        const { plainText, boldRanges, linkRanges } = processInlineFormatting(line.trim());
-        result.push({
-            type: 'paragraph',
-            text: plainText,
-            formatting: { boldRanges, linkRanges }
-        } as any);
     }
 
     return result;
@@ -234,7 +263,6 @@ export function parseMarkdownForPDF(markdown: string): MarkdownItem[] {
  * @returns A Promise that resolves when the PDF is generated
  */
 export async function generatePDF(content: string, title: string = 'Research Document'): Promise<boolean> {
-    console.log(content)
     try {
         // Create jsPDF instance
         const pdf = new jsPDF();
@@ -245,14 +273,9 @@ export async function generatePDF(content: string, title: string = 'Research Doc
         const contentWidth = pageWidth - (margin * 2);
         let y = margin;
 
-        // Add title
-        pdf.setFontSize(20);
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(title, margin, y);
-        y += 15;
-
         // Parse and process the markdown content
         const parsedContent = parseMarkdownForPDF(content);
+        console.log(parsedContent)
 
         // Add content
         pdf.setFontSize(12);
@@ -463,7 +486,7 @@ export async function generatePDF(content: string, title: string = 'Research Doc
                             contentWidth
                         );
 
-                        y += heightUsed + (fontSize / 3);
+                        y += heightUsed;
                     }
 
                     pdf.setFont('helvetica', 'normal');
@@ -491,11 +514,13 @@ export async function generatePDF(content: string, title: string = 'Research Doc
                     // Add bullet point
                     pdf.text('•', listIndent, y);
 
+                    console.log(listItem.text)
+
                     // Add text with proper indentation and formatting
                     y += renderFormattedText(
                         listItem.text,
                         listIndent + bulletWidth,
-                        y,
+                        y - 6,
                         listItem.formatting,
                         listContentWidth
                     );
@@ -504,8 +529,8 @@ export async function generatePDF(content: string, title: string = 'Research Doc
                 case 'numbered-list-item':
                     const numberedItem = item as any;
                     const numberedIndent = margin + 5;
-                    const numberWidth = 8;
-                    const numberedContentWidth = contentWidth - 10;
+                    const numberWidth = 10; // Increased from 8 to 10 for more space
+                    const numberedContentWidth = contentWidth - 12; // Increased spacing
 
                     // Add item number
                     pdf.text(`${numberedItem.number}.`, numberedIndent, y);
