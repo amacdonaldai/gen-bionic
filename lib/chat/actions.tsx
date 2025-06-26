@@ -26,7 +26,7 @@ import {
   spinner
 } from '@/components/stocks'
 
-import { saveChat } from '@/app/actions'
+import { saveChat, getChat } from '@/app/actions'
 import { auth } from '@/auth'
 import { Events } from '@/components/stocks/events'
 import { SpinnerMessage, ToolCallLoading, ToolImageLoading, ToolImages, ToolMessage, UserMessage, ToolLoadingAnimate, ArxivToolMessage, ToolWikipediaLoading, WikipediaToolMessage, SlideToolMessage, ToolSlideLoading, ExportPdfButton, ResearchAgentLoading, ResearchAgentMessage } from '@/components/stocks/message'
@@ -863,70 +863,70 @@ export const AI = createAI<AIState, UIState>({
     'use server'
 
     const session = await auth()
+    if (!session || !session.user) {
+      return
+    }
 
-    if (session && session.user) {
-      const { chatId, messages } = state
-      const createdAt = new Date()
-      // const userId = 'UaPhMV6MH8hJSk9p9dTJtbIpgQG8_9RCXjyxB0z7UiI' as string
-      const userId = session.user.id as string
-      const path = `/chat/${chatId}`
-      
-      // Safely extract title from the first message
-      let title = 'New Chat'
-      if (messages.length > 0) {
-        const firstMessage = messages[0]
-        
-        if (firstMessage.role === 'user' && Array.isArray(firstMessage.content)) {
-          // User message with array content
-          const textContent = firstMessage.content.find(c => c.type === 'text')
-          if (textContent && 'text' in textContent) {
-            title = textContent.text.substring(0, 100)
-          }
-        } else if (firstMessage.role === 'assistant') {
-          // Assistant message
-          if (typeof firstMessage.content === 'string') {
-            // Plain string content
-            title = firstMessage.content.substring(0, 100)
-          } else if (Array.isArray(firstMessage.content) && firstMessage.content[0]) {
-            // Tool-based content
-            const content = firstMessage.content[0]
-            if ('text' in content) {
-              title = content.text.substring(0, 100)
-            }
+    const { chatId, messages } = state
+    const userId = session.user.id as string
+    const path = `/chat/${chatId}`
+
+    if (messages.length === 0) {
+      return
+    }
+
+    const existingChat = await getChat(chatId, userId)
+
+    let title = existingChat?.title
+    if (!title && messages.length > 0) {
+      const firstMessage = messages[0]
+      if (firstMessage.role === 'user' && Array.isArray(firstMessage.content)) {
+        const textContent = firstMessage.content.find(c => c.type === 'text')
+        if (textContent && 'text' in textContent) {
+          title = textContent.text.substring(0, 100)
+        }
+      } else if (firstMessage.role === 'assistant') {
+        if (typeof firstMessage.content === 'string') {
+          title = firstMessage.content.substring(0, 100)
+        } else if (
+          Array.isArray(firstMessage.content) &&
+          firstMessage.content[0]
+        ) {
+          const content = firstMessage.content[0]
+          if ('text' in content) {
+            title = content.text.substring(0, 100)
           }
         }
       }
+      title = title || 'New Chat'
+    }
 
-      const chat: Chat = {
-        id: chatId,
-        title,
-        userId,
-        createdAt,
-        messages,
-        path
-      }
+    const chat: Chat = {
+      id: chatId,
+      title: title || 'New Chat',
+      userId,
+      createdAt: existingChat?.createdAt ?? new Date(),
+      messages,
+      path
+    }
 
-      try {
-        await saveChat(chat)
-      } catch (error) {
-        console.error('Error saving chat:', error)
-        // Don't throw the error to avoid breaking the UI
-        // The chat will still work, just won't be persisted
-      }
-    } else {
-      return
+    try {
+      await saveChat(chat)
+    } catch (error) {
+      console.error('Error saving chat:', error)
     }
   }
 })
 
-export const getUIStateFromAIState = (aiState: Chat) => {
-  return aiState.messages
+export const getUIStateFromAIState = (state: AIState | Chat) => {
+  const chatId = 'chatId' in state ? state.chatId : state.id
+  return state.messages
     .filter(message => message.role !== 'system')
     .map((message, index) => ({
-      id: `${aiState.chatId}-${index}`,
-      display:
-        message.role === 'tool' ? (
-          message.content.map(tool => {
+      id: `${chatId}-${index}`,
+      display: (() => {
+        if (message.role === 'tool') {
+          return message.content.map(tool => {
             return tool.toolName === 'listStocks' ? (
               <BotCard>
                 <Stocks props={tool.result} />
@@ -941,7 +941,10 @@ export const getUIStateFromAIState = (aiState: Chat) => {
               </BotCard>
             ) : tool.toolName === 'exportToPdf' ? (
               <BotCard>
-                <ExportPdfButton content={tool.result.content} title={tool.result.title} />
+                <ExportPdfButton
+                  content={tool.result.content}
+                  title={tool.result.title}
+                />
               </BotCard>
             ) : tool.toolName === 'researchAgent' ? (
               <BotCard>
@@ -953,37 +956,66 @@ export const getUIStateFromAIState = (aiState: Chat) => {
               </BotCard>
             ) : null
           })
-        )
-          : message.role === 'user' ? (
+        }
+        if (message.role === 'user') {
+          const textPart = Array.isArray(message.content)
+            ? message.content.find(p => p.type === 'text')
+            : null
+          // TODO: Render images and other content types
+          return (
             <UserMessage>
-              {Array.isArray(message.content) && message.content[0]?.type === 'text' 
-                ? message.content[0].text 
-                : ''}
+              {textPart && 'text' in textPart ? textPart.text : ''}
             </UserMessage>
           )
-            : message.role === 'assistant' ? (
-              typeof message.content === 'string' ? (
-                <BotMessage content={message.content} />
-              ) : (
-                typeof message.content === 'object' &&
-                (message.content[0]?.toolName === 'searchWeb' ? (
-                  <BotCard>
-                    <ToolMessage content={message.content[0].text} toolCallMeta={message.content[0].meta} />
-                  </BotCard>
-                ) : message.content[0]?.toolName === 'arxivApiCaller' ? (
-                  <BotCard>
-                    <ArxivToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
-                  </BotCard>
-                ) : message.content[0]?.toolName === 'wikipediaSearch' ? (
-                  <BotCard>
-                    <WikipediaToolMessage content={message?.content[0]?.text} query={message.content[0].meta} />
-                  </BotCard>
-                ) : message.content[0]?.toolName === 'generateSlides' ? (
-                  <BotCard>
-                    <SlideToolMessage content={message?.content[0]?.text} slides={message.content[0].slides} />
-                  </BotCard>
-                ) : null)
+        }
+        if (message.role === 'assistant') {
+          if (typeof message.content === 'string') {
+            return <BotMessage content={message.content} />
+          } else if (Array.isArray(message.content) && message.content[0]) {
+            const content = message.content[0]
+            if (content.toolName === 'searchWeb') {
+              return (
+                <BotCard>
+                  <ToolMessage
+                    content={content.text}
+                    toolCallMeta={content.meta}
+                  />
+                </BotCard>
               )
-            ) : null
+            }
+            if (content.toolName === 'arxivApiCaller') {
+              return (
+                <BotCard>
+                  <ArxivToolMessage
+                    content={content.text}
+                    query={content.meta}
+                  />
+                </BotCard>
+              )
+            }
+            if (content.toolName === 'wikipediaSearch') {
+              return (
+                <BotCard>
+                  <WikipediaToolMessage
+                    content={content.text}
+                    query={content.meta}
+                  />
+                </BotCard>
+              )
+            }
+            if (content.toolName === 'generateSlides') {
+              return (
+                <BotCard>
+                  <SlideToolMessage
+                    content={content.text}
+                    slides={content.slides}
+                  />
+                </BotCard>
+              )
+            }
+          }
+        }
+        return null
+      })()
     }))
 }
