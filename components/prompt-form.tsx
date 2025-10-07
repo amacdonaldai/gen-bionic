@@ -6,7 +6,8 @@ import {
   IconArrowElbow,
   IconPlus,
   IconTrash,
-  IconsDocument
+  IconsDocument,
+  IconSpinner
 } from '@/components/ui/icons'
 import {
   Tooltip,
@@ -39,13 +40,16 @@ export function PromptForm({
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const { submitUserMessage } = useActions()
   const [messages, setMessages] = useUIState<typeof AI>()
-  const [uploadedImages, setUploadedImages] = React.useState<string[]>([])
+  const [uploadedImages, setUploadedImages] = React.useState<
+    { name: string; data: string }[]
+  >([])
 
   //Adding Pdf files
   const [uploadedPdfFiles, setUploadedPdfFiles] = React.useState<
     {
-      text: string
+      base64: string
       name: string
+      mimeType: string
     }[]
   >([])
 
@@ -101,45 +105,80 @@ export function PromptForm({
           // Compress the image before encoding it
           const compressedFile = await compressImage(file)
 
-          const reader = new FileReader()
-          reader.onerror = () => {
-            toast.error('Failed to read file')
-          }
-
-          reader.onloadend = () => {
-            const base64String = reader.result as string
-            if (!base64String) {
-              toast.error('Failed to encode file')
-              return
+          // Wrap FileReader in a Promise to properly await it
+          const base64String = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onerror = () => {
+              reject(new Error('Failed to read file'))
             }
-            setUploadedImages(prevImages => [...prevImages, base64String])
-          }
+            reader.onloadend = () => {
+              const result = reader.result as string
+              if (!result) {
+                reject(new Error('Failed to encode file'))
+              } else {
+                resolve(result)
+              }
+            }
+            reader.readAsDataURL(compressedFile)
+          })
 
-          reader.readAsDataURL(compressedFile)
+          setUploadedImages(prevImages => [
+            ...prevImages,
+            { name: file.name, data: base64String }
+          ])
         } catch (error) {
-          toast.error('Failed to compress file')
+          toast.error(`Failed to process ${file.name}`)
+          console.error('Error processing image:', error)
         }
       }
     }
     if (pdfFiles.length > 0) {
       for (const file of pdfFiles) {
         const fileName = file.name
-        const formData = new FormData()
-        formData.append('file', file)
         try {
-          const res = await axios.post('/api/upload/pdf-to-text', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
+          // Method: Convert PDF to base64 (most reliable, no external dependencies)
+          const base64String = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onerror = () => reject(new Error('Failed to read file'))
+            reader.onloadend = () => {
+              const result = reader.result as string
+              if (!result) {
+                reject(new Error('Failed to encode file'))
+              } else {
+                // Remove data URL prefix if present
+                const base64 = result.split(',')[1] || result
+                resolve(base64)
+              }
             }
+            reader.readAsDataURL(file)
           })
-          if (res.data?.text) {
-            setUploadedPdfFiles(prev => [
-              ...prev,
-              { name: fileName, text: res.data.text }
-            ])
-          }
+
+          setUploadedPdfFiles(prev => [
+            ...prev,
+            {
+              base64: base64String,
+              name: fileName,
+              mimeType: file.type
+            }
+          ])
+
+          // COMMENTED: Vercel Blob Upload Method
+          // const formData = new FormData()
+          // formData.append('file', file)
+          // const res = await axios.post('/api/upload-blob', formData, {
+          //   headers: { 'Content-Type': 'multipart/form-data' }
+          // })
+          // if (res.data?.url) {
+          //   setUploadedPdfFiles(prev => [...prev, {
+          //     url: res.data.url,
+          //     name: fileName,
+          //     mimeType: file.type
+          //   }])
+          // }
+
         } catch (error) {
-          toast.error('Error uploading pdf file.')
+          console.error('Error processing PDF file:', error)
+          toast.error(`Error processing ${fileName}`)
         }
       }
     }
@@ -168,6 +207,11 @@ export function PromptForm({
       }
     }
     setIsUploading(false)
+
+    // Clear the file input so the same file can be selected again
+    if (fileRef.current) {
+      fileRef.current.value = ''
+    }
   }
 
   const compressImage = async (file: File) => {
@@ -204,7 +248,7 @@ export function PromptForm({
         {uploadedImages.map((image, index) => (
           <img
             key={index}
-            src={image}
+            src={image.data}
             alt="Uploaded"
             className="max-w-full h-auto rounded-lg"
           />
@@ -213,12 +257,15 @@ export function PromptForm({
           return (
             <div
               key={index}
-              className="bg-zinc-200 flex items-center p-2 rounded-xl gap-2"
+              className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950 dark:to-orange-950 flex items-center p-3 rounded-xl gap-3 border border-red-200 dark:border-red-800"
             >
-              <span className="bg-white p-2 rounded-lg flex items-center justify-center">
+              <span className="bg-white dark:bg-zinc-800 p-2 rounded-lg flex items-center justify-center text-red-600">
                 <IconsDocument />
               </span>
-              <span>{val.name}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">{val.name}</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">PDF Document</p>
+              </div>
             </div>
           )
         })}
@@ -226,12 +273,15 @@ export function PromptForm({
           return (
             <div
               key={index}
-              className="bg-zinc-200 flex items-center p-2 rounded-xl gap-2"
+              className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 flex items-center p-3 rounded-xl gap-3 border border-green-200 dark:border-green-800"
             >
-              <span className="bg-white p-2 rounded-lg flex items-center justify-center">
+              <span className="bg-white dark:bg-zinc-800 p-2 rounded-lg flex items-center justify-center text-green-600">
                 <IconsDocument />
               </span>
-              <span>{val.name}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">{val.name}</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">CSV Document</p>
+              </div>
             </div>
           )
         })}
@@ -247,10 +297,13 @@ export function PromptForm({
     ])
 
     try {
+      // Extract just the base64 data for submission
+      const imageDataArray = uploadedImages.map(img => img.data)
+
       const responseMessage = await submitUserMessage(
         value,
         model,
-        uploadedImages,
+        imageDataArray,
         uploadedPdfFiles,
         uploadingCSVFiles
       )
@@ -259,6 +312,11 @@ export function PromptForm({
       setUploadedImages([])
       setUploadedPdfFiles([])
       setUploadingCSVFiles([])
+
+      // Clear the file input
+      if (fileRef.current) {
+        fileRef.current.value = ''
+      }
     } catch (error) {
       console.error('Error submitting message:', error)
       toast(
@@ -272,7 +330,9 @@ export function PromptForm({
   const canUploadAttachments = [
     'gpt-4',
     'gpt-4-turbo',
-    'gpt-4o-2024-05-13'
+    'gpt-4o-2024-05-13',
+    'gpt-4o-mini',
+    'gpt-4.1-mini',
   ].includes(model)
 
   return (
@@ -286,96 +346,170 @@ export function PromptForm({
         onChange={handleFileChange}
         multiple
       />
+
+      {/* File Preview Section - Outside Input Box */}
+      {(uploadedImages.length > 0 || uploadedPdfFiles.length > 0 || uploadingCSVFiles.length > 0 || isUploading) && (
+        <div className="mb-3 px-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Image Previews */}
+            {uploadedImages.map((image, index) => (
+              <div
+                key={`img-${index}`}
+                className="relative group bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-2 flex items-center gap-2 min-w-[200px] max-w-[250px] shadow-sm hover:shadow-md transition-all"
+              >
+                <img
+                  src={image.data}
+                  alt="Preview"
+                  className="w-12 h-12 rounded object-cover flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate" title={image.name}>
+                    {image.name}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Image file
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="flex-shrink-0 text-zinc-400 hover:text-red-500 transition-colors"
+                  onClick={() =>
+                    setUploadedImages(prevImages =>
+                      prevImages.filter((_, i) => i !== index)
+                    )
+                  }
+                >
+                  <IconTrash className="w-4 h-4" />
+                  <span className="sr-only">Remove</span>
+                </button>
+              </div>
+            ))}
+
+            {/* PDF Previews */}
+            {uploadedPdfFiles.map((pdf, index) => (
+              <div
+                key={`pdf-${index}`}
+                className="relative group bg-white dark:bg-zinc-800 rounded-lg border border-red-200 dark:border-red-800 p-2 flex items-center gap-2 min-w-[200px] max-w-[250px] shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="w-12 h-12 rounded bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white flex-shrink-0">
+                  <div className="scale-150">
+                    <IconsDocument />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate" title={pdf.name}>
+                    {pdf.name}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    PDF Document
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="flex-shrink-0 text-zinc-400 hover:text-red-500 transition-colors"
+                  onClick={() =>
+                    setUploadedPdfFiles(prevFiles =>
+                      prevFiles.filter((_, i) => i !== index)
+                    )
+                  }
+                >
+                  <IconTrash className="w-4 h-4" />
+                  <span className="sr-only">Remove</span>
+                </button>
+              </div>
+            ))}
+
+            {/* CSV Previews */}
+            {uploadingCSVFiles.map((csv, index) => (
+              <div
+                key={`csv-${index}`}
+                className="relative group bg-white dark:bg-zinc-800 rounded-lg border border-green-200 dark:border-green-800 p-2 flex items-center gap-2 min-w-[200px] max-w-[250px] shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="w-12 h-12 rounded bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center text-white flex-shrink-0">
+                  <div className="scale-150">
+                    <IconsDocument />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate" title={csv.name}>
+                    {csv.name}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    CSV Document
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="flex-shrink-0 text-zinc-400 hover:text-green-600 transition-colors"
+                  onClick={() =>
+                    setUploadingCSVFiles(prevFiles =>
+                      prevFiles.filter((_, i) => i !== index)
+                    )
+                  }
+                >
+                  <IconTrash className="w-4 h-4" />
+                  <span className="sr-only">Remove</span>
+                </button>
+              </div>
+            ))}
+
+            {/* Uploading Indicator */}
+            {isUploading && (
+              <div className="bg-white dark:bg-zinc-800 rounded-lg border border-blue-200 dark:border-blue-800 p-2 flex items-center gap-2 min-w-[200px] shadow-sm">
+                <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white flex-shrink-0">
+                  <IconSpinner className="w-5 h-5 animate-spin" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
+                    Uploading...
+                  </p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Please wait
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Input Box */}
       <div className="relative flex w-full items-center bg-zinc-100 px-6 sm:rounded-full sm:px-6">
-        {canUploadAttachments && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                className="size-8 cursor-pointer rounded-full bg-background p-0 flex items-center justify-center"
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-8 rounded-full bg-background p-0 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => {
-                  if (isUploading) {
+                  if (isUploading || !canUploadAttachments) {
                     return
                   }
                   fileRef.current?.click()
                 }}
+                disabled={isUploading || !canUploadAttachments}
               >
-                <IconPlus />
-                <span className="sr-only">New Chat</span>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Add Attachments</TooltipContent>
-          </Tooltip>
-        )}
-        <div className="relative mt-2 mb-2 ml-2 flex justify-center space-x-2">
-          {uploadedImages.length > 0 && (
-            <>
-              {uploadedImages.map((image, index) => (
-                <div key={index} className="relative">
-                  <img
-                    src={image}
-                    alt="Uploaded"
-                    className="w-12 h-12 object-cover rounded-full border"
-                  />
-                  <span
-                    className="absolute top-0 right-0 z-10 text-red-500 bg-white rounded-full p-1 cursor-pointer"
-                    onClick={() =>
-                      setUploadedImages(prevImages =>
-                        prevImages.filter((_, i) => i !== index)
-                      )
-                    }
-                  >
-                    <IconTrash className="w-4 h-4" />
-                    <span className="sr-only">Remove image</span>
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-          {uploadedPdfFiles.map((_, index) => {
-            return (
-              <div
-                key={index}
-                className="relative h-12 w-12 flex items-center justify-center bg-black mx-1 rounded-lg "
-              >
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute  text-red-500 bg-white rounded-full p-1"
-                  onClick={() => {
-                    setUploadedPdfFiles(prevFile =>
-                      prevFile.filter((_, i) => i !== index)
-                    )
-                  }}
-                >
-                  <IconTrash className="w-4 h-4" />
-                  <span className="sr-only">Remove PDF</span>
-                </Button>
-              </div>
-            )
-          })}
-          {uploadingCSVFiles.map((_, index) => {
-            return (
-              <div
-                key={index}
-                className="relative h-12 w-12 flex items-center justify-center bg-black mx-1 rounded-lg "
-              >
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="absolute  text-red-500 bg-white rounded-full p-1"
-                  onClick={() => {
-                    setUploadingCSVFiles(prevFile =>
-                      prevFile.filter((_, i) => i !== index)
-                    )
-                  }}
-                >
-                  <IconTrash className="w-4 h-4" />
-                  <span className="sr-only">Remove CSV</span>
-                </Button>
-              </div>
-            )
-          })}
-        </div>
+                {isUploading ? (
+                  <IconSpinner className="animate-spin" />
+                ) : (
+                  <IconPlus />
+                )}
+                <span className="sr-only">
+                  {isUploading ? 'Uploading...' : canUploadAttachments ? 'Add Attachments' : 'Attachments not supported'}
+                </span>
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isUploading
+              ? 'Uploading files...'
+              : !canUploadAttachments
+                ? 'This model does not support file attachments. Please select GPT-4, GPT-4 Turbo, GPT-4o, or GPT-4o Mini.'
+                : 'Add Attachments'}
+          </TooltipContent>
+        </Tooltip>
         <Textarea
           ref={inputRef}
           tabIndex={0}
@@ -396,15 +530,20 @@ export function PromptForm({
             <Button
               type="submit"
               size="icon"
-              disabled={input === '' && uploadedImages.length === 0}
-              className="bg-black shadow-none hover:bg-gray-800 rounded-full"
+              disabled={
+                isUploading ||
+                (input === '' && uploadedImages.length === 0 && uploadedPdfFiles.length === 0 && uploadingCSVFiles.length === 0)
+              }
+              className="bg-black shadow-none hover:bg-gray-800 rounded-full disabled:opacity-50"
               style={{ background: "black" }}
             >
               <IconArrowElbow />
               <span className="sr-only">Send message</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Send message</TooltipContent>
+          <TooltipContent>
+            {isUploading ? 'Wait for upload to complete...' : 'Send message'}
+          </TooltipContent>
         </Tooltip>
       </div>
 
