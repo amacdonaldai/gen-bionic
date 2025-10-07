@@ -55,7 +55,14 @@ type ImagePart = {
   image: string
 }
 
-type MessageContent = TextPart | ImagePart
+type FilePart = {
+  type: 'file'
+  data: string
+  mimeType: string
+  name?: string
+}
+
+type MessageContent = TextPart | ImagePart | FilePart
 
 type UserMessage = {
   id: string
@@ -174,7 +181,7 @@ async function submitUserMessage(
   content: string,
   model: string,
   images?: string[],
-  pdfFiles?: { name: string; text: string }[],
+  pdfFiles?: { base64: string; name: string; mimeType: string }[],
   csvFiles?: { name: string; text: string }[]
 ) {
   'use server'
@@ -192,14 +199,12 @@ async function submitUserMessage(
   }
 
   if (pdfFiles && pdfFiles.length > 0) {
-    pdfFiles.map(val => {
+    pdfFiles.forEach(pdf => {
       messageContent.push({
-        type: 'text',
-        // To ensure that AI reads this text in PDF formate
-        text:
-          'Treat the below text as pdf. \n' +
-          val.text +
-          '\n here, this Pdf ends.'
+        type: 'file',
+        data: pdf.base64, // Using base64 encoded data
+        mimeType: pdf.mimeType,
+        name: pdf.name
       })
     })
   }
@@ -958,13 +963,76 @@ export const getUIStateFromAIState = (state: AIState | Chat) => {
           })
         }
         if (message.role === 'user') {
-          const textPart = Array.isArray(message.content)
-            ? message.content.find(p => p.type === 'text')
-            : null
-          // TODO: Render images and other content types
+          if (!Array.isArray(message.content)) {
+            return <UserMessage>{message.content}</UserMessage>
+          }
+
+          const textParts = message.content.filter(p => p.type === 'text')
+          const imageParts = message.content.filter(p => p.type === 'image')
+          const fileParts = message.content.filter(p => p.type === 'file')
+
           return (
             <UserMessage>
-              {textPart && 'text' in textPart ? textPart.text : ''}
+              <div className="flex flex-col gap-2">
+                {textParts.map((part, idx) => (
+                  <p key={`text-${idx}`}>{'text' in part ? part.text : ''}</p>
+                ))}
+                {imageParts.map((part, idx) => {
+                  const imageData = 'image' in part ? part.image : ''
+                  return (
+                    <img
+                      key={`img-${idx}`}
+                      src={`data:image/jpeg;base64,${imageData}`}
+                      alt="Uploaded"
+                      className="max-w-full h-auto rounded-lg"
+                    />
+                  )
+                })}
+                {fileParts.map((part, idx) => {
+                  if (!('data' in part)) return null
+                  const fileName = ('name' in part && part.name)
+                    ? part.name
+                    : 'document.pdf'
+                  const isPdf = 'mimeType' in part && part.mimeType === 'application/pdf'
+                  const mimeType = 'mimeType' in part ? part.mimeType : 'application/pdf'
+
+                  // Convert base64 to data URL for viewing
+                  const dataUrl = part.data.startsWith('http')
+                    ? part.data // If it's already a URL
+                    : `data:${mimeType};base64,${part.data}` // If it's base64
+
+                  return (
+                    <a
+                      key={`file-${idx}`}
+                      href={dataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950 dark:to-orange-950 flex items-center p-3 rounded-xl gap-3 border border-red-200 dark:border-red-800 hover:shadow-md transition-shadow cursor-pointer"
+                    >
+                      <span className="bg-white dark:bg-zinc-800 p-2 rounded-lg flex items-center justify-center text-red-600">
+                        <svg
+                          height="16"
+                          viewBox="0 0 16 16"
+                          width="16"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="currentColor"
+                        >
+                          <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z" />
+                          <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z" />
+                        </svg>
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                          {fileName}
+                        </p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {isPdf ? 'PDF Document' : 'Document'} • Click to open
+                        </p>
+                      </div>
+                    </a>
+                  )
+                })}
+              </div>
             </UserMessage>
           )
         }
